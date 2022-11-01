@@ -1,0 +1,27 @@
+﻿---
+AccessModifierOffset: '-8'
+AlignAfterOpenBracket: Align
+AlignTrailingComments: 'true'
+AllowShortBlocksOnASingleLine: 'true'
+AllowShortCaseLabelsOnASingleLine: 'true'
+BinPackArguments: 'true'
+BinPackParameters: 'true'
+BreakBeforeBraces: Allman
+ColumnLimit: '0'
+CompactNamespaces: 'false'
+Cpp11BracedListStyle: 'false'
+IndentCaseLabels: 'false'
+IndentPPDirectives: BeforeHash
+IndentWidth: '8'
+Language: Cpp
+NamespaceIndentation: All
+PointerAlignment: Left
+SpaceAfterTemplateKeyword: 'false'
+SpaceBeforeParens: Never
+SpacesInAngles: 'true'
+SpacesInCStyleCastParentheses: 'true'
+SpacesInParentheses: 'true'
+SpacesInSquareBrackets: 'false'
+UseTab: Always
+
+...
