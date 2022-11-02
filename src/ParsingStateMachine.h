@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <assert.h>
 #include <span>
 #include <type_traits>
 
@@ -75,6 +76,7 @@ namespace psm
 	public:
 		using Rules = std::tuple<>;
 
+		virtual ~RuleBase() {}
 		virtual RuleResult match( RuleInput& input, void* states )
 		{
 			return { RuleMatchCode::False };
@@ -82,9 +84,6 @@ namespace psm
 		virtual RuleResult nestedResult( RuleInput& input, void* states, const NestedRuleResult& nestedResult )
 		{
 			return { RuleMatchCode::False };
-		}
-		virtual void reset()
-		{
 		}
 	};
 
@@ -267,25 +266,27 @@ namespace psm
 
 		//===========================================================================================================================================
 
-		template< std::size_t Deep, typename Rules >
-		struct _nested_rules_info;
+		template< std::size_t Deep, std::size_t StackSize, typename Rules >
+		struct _rules_info;
 
-		template< std::size_t Deep, typename... Rules_ >
-		struct _nested_rules_info< Deep, std::tuple< Rules_... > >
+		template< std::size_t Deep, std::size_t StackSize, typename... Rules_ >
+		struct _rules_info< Deep, StackSize, std::tuple< Rules_... > >
 		{
-			static constexpr std::size_t max_deep = max< std::size_t, _nested_rules_info< Deep + 1, typename Rules_::Rules >::max_deep... >::value;
-			using unique_rules = unique_tuple_cat_t< typename _nested_rules_info< Deep + 1, typename Rules_::Rules >::unique_rules..., unique_types_t< std::tuple< Rules_... > > >;
+			static constexpr std::size_t max_deep = max< std::size_t, _rules_info< Deep + 1, StackSize + sizeof( Rules_ ), typename Rules_::Rules >::max_deep... >::value;
+			static constexpr std::size_t stack_size = max< std::size_t, _rules_info< Deep + 1, StackSize + sizeof( Rules_ ), typename Rules_::Rules >::stack_size... >::value;
+			using unique_rules = unique_tuple_cat_t< typename _rules_info< Deep + 1, StackSize + sizeof( Rules_ ), typename Rules_::Rules >::unique_rules..., unique_types_t< std::tuple< Rules_... > > >;
 		};
 
-		template< std::size_t Deep >
-		struct _nested_rules_info< Deep, std::tuple<> >
+		template< std::size_t Deep, std::size_t StackSize >
+		struct _rules_info< Deep, StackSize, std::tuple<> >
 		{
 			static constexpr std::size_t max_deep = Deep;
+			static constexpr std::size_t stack_size = StackSize;
 			using unique_rules = std::tuple<>;
 		};
 
 		template< typename Rule >
-		struct nested_rules_info : _nested_rules_info< 0, typename Rule::Rules >
+		struct rule_info : _rules_info< ( std::size_t )-1, 0, std::tuple< Rule > >
 		{
 		};
 
@@ -297,6 +298,34 @@ namespace psm
 		    : std::integral_constant< std::size_t, integer_sequence_sum< std::index_sequence< std::tuple_size_v< typename Rules_::Rules >... > >::value >
 		{
 		};
+
+		struct RuleConstructorBase
+		{
+			virtual RuleBase* construct( void* mem ) const noexcept = 0;
+			virtual std::size_t size() const noexcept = 0;
+		};
+
+		template< typename Rule >
+		struct RuleConstructor : RuleConstructorBase
+		{
+			RuleBase* construct( void* mem ) const noexcept override
+			{
+				return new( mem ) Rule;
+			}
+			std::size_t size() const noexcept override
+			{
+				return sizeof( Rule );
+			}
+		};
+
+		template< typename Rule >
+		struct RuleConstructorStorage
+		{
+			static RuleConstructor< Rule > constructor;
+		};
+
+		template< typename Rule >
+		RuleConstructor< Rule > RuleConstructorStorage< Rule >::constructor;
 
 		template< typename Rule, typename Action >
 		void ruleActionFunction( Action& action, const RuleBase* rule, std::size_t beginPos, const char* begin, const char* end )
@@ -340,247 +369,340 @@ namespace psm
 	class Parser : public ParserBase
 	{
 	public:
-		using UniqueRules = detail::push_type_front_t< typename detail::nested_rules_info< Rule >::unique_rules, Rule >;
-		static constexpr std::size_t MaxDeep = detail::nested_rules_info< Rule >::max_deep;
+		using UniqueRules = typename detail::rule_info< Rule >::unique_rules;
+		static constexpr std::size_t MaxDeep = detail::rule_info< Rule >::max_deep;
 		static constexpr bool UseActionFunction = std::tuple_size_v< typename ActionFunction::Rules > != 0;
 		static constexpr bool UseRulePosition = UseActionFunction && RulePositioning;
 
-		Parser()
-		{
-			initRuleInfos( std::make_index_sequence< std::tuple_size_v< UniqueRules > >{} );
-			current_ = &ruleInfos_.front();
-		}
-		Parser( ActionFunction func ) : actionFunc_( std::move( func ) )
-		{
-			initRuleInfos( std::make_index_sequence< std::tuple_size_v< UniqueRules > >{} );
-			current_ = &ruleInfos_.front();
-		}
+		Parser();
+		Parser( ActionFunction func );
+		Parser( const Parser& ) = delete;
+		Parser( Parser&& ) = delete;
+		~Parser();
 
-		inline void setActionFunction( ActionFunction func )
-		{
-			actionFunc_ = std::move( func );
-		}
+		inline void setActionFunction( ActionFunction func );
+		inline void setStates( void* states );
 
-		inline void setStates( void* states )
-		{
-			states_ = states;
-		}
-
-		std::pair< ParsingResultType, const char* > parse( const char* begin, const char* end, bool complete ) override
-		{
-			if( begin == end && !complete )
-				return { ParsingResultType::Incomplete, begin };
-
-			RuleInput input( begin + current_->beginPos, end, current_->pos );
-			RuleResult result;
-			while( true )
-			{
-				if( input.size() )
-				{
-					result = current_->rule->match( input, states_ );
-					if( result.code == RuleMatchCode::TrueCanMore )
-					{
-						if( !complete )
-						{
-							current_->pos = input.position();
-							return { ParsingResultType::Incomplete, begin };
-						}
-						result.code = RuleMatchCode::True;
-					}
-					else if( result.code == RuleMatchCode::NotTrueYet )
-					{
-						if( !complete )
-						{
-							current_->pos = input.position();
-							return { ParsingResultType::Incomplete, begin };
-						}
-						result.code = RuleMatchCode::False;
-					}
-				}
-				else if( complete )
-					result.code = RuleMatchCode::False;
-				else
-				{
-					current_->pos = input.position();
-					return { ParsingResultType::Incomplete, begin };
-				}
-
-			ProcessResult:
-				if( result.code == RuleMatchCode::CallNested )
-				{
-					current_->nextIndex = result.callIndex;
-					auto nextRuleIndex = current_->nestedRuleIndexes[result.callIndex];
-					ruleInfos_[nextRuleIndex].prevIndex = ( std::size_t )( current_ - &ruleInfos_.front() );
-					current_->pos = input.position();
-					current_ = &ruleInfos_[nextRuleIndex];
-					current_->beginPos = ( std::size_t )( input.current() - begin );
-					current_->pos = input.position();
-					current_->rule->reset();
-					input = RuleInput( input.current(), input.end() );
-					continue;
-				}
-				else
-				{
-					if( current_ == &ruleInfos_.front() )
-					{
-						current_->rule->reset();
-						current_->pos = 0;
-						if( result.code == RuleMatchCode::True )
-						{
-							const char* end_ = begin + input.position();
-							callAction( 0, begin, end_ );
-							return { ParsingResultType::True, end_ };
-						}
-						return { ParsingResultType::False, begin };
-					}
-					if( result.code == RuleMatchCode::True )
-					{
-						const char* begin_ = begin + current_->beginPos;
-						callAction( current_->beginPos, begin_, begin_ + input.position() );
-					}
-					RuleInput nestedInput = input;
-					NestedRuleResult nestedResult( nestedInput );
-					nestedResult.rule = current_->rule;
-					current_ = &ruleInfos_[current_->prevIndex];
-					input = RuleInput( begin + current_->beginPos, end, current_->pos );
-					nestedResult.index = current_->nextIndex;
-					nestedResult.result = result.code == RuleMatchCode::True;
-					result = current_->rule->nestedResult( input, states_, nestedResult );
-					if( result.code == RuleMatchCode::TrueCanMore )
-					{
-						if( complete )
-						{
-							result.code = RuleMatchCode::True;
-							goto ProcessResult;
-						}
-						current_->pos = input.position();
-						return { ParsingResultType::Incomplete, begin };
-					}
-					else if( result.code == RuleMatchCode::NotTrueYet )
-					{
-						if( complete )
-						{
-							result.code = RuleMatchCode::False;
-							goto ProcessResult;
-						}
-						current_->pos = input.position();
-						return { ParsingResultType::Incomplete, begin };
-					}
-					goto ProcessResult;
-				}
-			}
-			return { ParsingResultType::False, begin };
-		}
-
-		void reset() override
-		{
-			current_ = &ruleInfos_.front();
-			current_->rule->reset();
-			current_->pos = 0;
-		}
+		std::pair< ParsingResultType, const char* > parse( const char* begin, const char* end, bool complete ) override;
+		void reset() override;
 
 	private:
 		static constexpr std::size_t IndexArraySize = detail::dependent_rule_count< UniqueRules >::value;
 		using IndexType = std::conditional_t< IndexArraySize <= 256, uint8_t, uint16_t >;
+		struct Position;
 
 		template< std::size_t Id >
-		inline void initIndex( std::size_t& n )
-		{
-			indexes_[n++] = ( IndexType )Id;
-		}
+		inline void initIndex( std::size_t& n );
 
 		template< std::size_t... Ids >
-		inline void initIndexes( std::size_t& n, std::index_sequence< Ids... > )
-		{
-			( initIndex< Ids >( n ), ... );
-		}
+		inline void initIndexes( std::size_t& n, std::index_sequence< Ids... > );
 
 		template< std::size_t Id >
-		inline void initRule( std::size_t& n )
+		inline void initRule( std::size_t& n );
+
+		template< std::size_t... Ids >
+		void initRuleInfos( std::index_sequence< Ids... > );
+
+		void callAction( Position* pos, RuleBase* rule, std::size_t beginPos, const char* begin, const char* end );
+		RuleBase* pushRule( std::size_t index );
+		void popRule( std::size_t index );
+		RuleBase* topRule( std::size_t index );
+
+	private:
+		using _RuleActionFunction = void ( * )( ActionFunction&, const RuleBase*, std::size_t, const char*, const char* );
+		using _RuleActionFunctionPos = void ( * )( ActionFunction&, const std::span< const std::size_t >&, const RuleBase*, std::size_t, const char*, const char* );
+		using RuleActionFunction = std::conditional_t< UseRulePosition, _RuleActionFunctionPos, _RuleActionFunction >;
+		struct Position
 		{
-			using CRule = std::tuple_element_t< Id, UniqueRules >;
-			ruleInfos_[Id].rule = &std::get< Id >( rules_ );
-			if constexpr( std::tuple_size_v< typename CRule::Rules > != 0 )
+			std::size_t ruleIndex;
+			std::size_t nestedIndex = 0;
+			std::size_t beginPos;
+			std::size_t pos;
+		};
+		struct _RuleInfoV0
+		{
+			detail::RuleConstructorBase* constructor;
+			IndexType* nestedRuleIndexes;
+		};
+		struct _RuleInfoV1
+		{
+			detail::RuleConstructorBase* constructor;
+			IndexType* nestedRuleIndexes;
+			RuleActionFunction func;
+		};
+		using RuleInfo = std::conditional_t< UseActionFunction, _RuleInfoV1, _RuleInfoV0 >;
+		ActionFunction actionFunc_;
+		void* states_ = nullptr;
+		std::array< RuleInfo, std::tuple_size_v< UniqueRules > > ruleInfos_;
+		std::array< IndexType, IndexArraySize > indexes_;
+		std::array< Position, detail::rule_info< Rule >::max_deep + 1 > positions_;
+		std::array< uint8_t, detail::rule_info< Rule >::stack_size > ruleStackData_;
+		Position* currentPos_;
+		uint8_t* stackTop_;
+	};
+
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	Parser< Rule, ActionFunction, RulePositioning >::Parser()
+	{
+		initRuleInfos( std::make_index_sequence< std::tuple_size_v< UniqueRules > >{} );
+		currentPos_ = &positions_.front();
+		currentPos_->beginPos = 0;
+		currentPos_->pos = 0;
+		currentPos_->ruleIndex = std::tuple_size_v< UniqueRules > - 1;
+		stackTop_ = &ruleStackData_.front();
+		pushRule( currentPos_->ruleIndex );
+	}
+
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	Parser< Rule, ActionFunction, RulePositioning >::Parser( ActionFunction func ) : actionFunc_( std::move( func ) )
+	{
+		initRuleInfos( std::make_index_sequence< std::tuple_size_v< UniqueRules > >{} );
+		currentPos_ = &positions_.front();
+		currentPos_->beginPos = 0;
+		currentPos_->pos = 0;
+		currentPos_->ruleIndex = std::tuple_size_v< UniqueRules > - 1;
+		stackTop_ = &ruleStackData_.front();
+		pushRule( currentPos_->ruleIndex );
+	}
+
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	Parser< Rule, ActionFunction, RulePositioning >::~Parser()
+	{
+		for( ; currentPos_ != &positions_.front(); --currentPos_ )
+			popRule( currentPos_->ruleIndex );
+		popRule( currentPos_->ruleIndex );
+	}
+
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	inline void Parser< Rule, ActionFunction, RulePositioning >::setActionFunction( ActionFunction func )
+	{
+		actionFunc_ = std::move( func );
+	}
+
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	inline void Parser< Rule, ActionFunction, RulePositioning >::setStates( void* states )
+	{
+		states_ = states;
+	}
+
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	std::pair< ParsingResultType, const char* > Parser< Rule, ActionFunction, RulePositioning >::parse( const char* begin, const char* end, bool complete )
+	{
+		if( begin == end && !complete )
+			return { ParsingResultType::Incomplete, begin };
+
+		RuleBase* rule = reinterpret_cast< RuleBase* >( stackTop_ - ruleInfos_[currentPos_->ruleIndex].constructor->size() );
+		RuleInput input( begin + currentPos_->beginPos, end, currentPos_->pos );
+		RuleResult result;
+		while( true )
+		{
+			if( input.size() )
 			{
-				ruleInfos_[Id].nestedRuleIndexes = &indexes_[n];
-				initIndexes( n, detail::index_sequence_for_part_in_whole_t< UniqueRules, typename CRule::Rules >{} );
+				result = rule->match( input, states_ );
+				if( result.code == RuleMatchCode::TrueCanMore )
+				{
+					if( !complete )
+					{
+						currentPos_->pos = input.position();
+						return { ParsingResultType::Incomplete, begin };
+					}
+					result.code = RuleMatchCode::True;
+				}
+				else if( result.code == RuleMatchCode::NotTrueYet )
+				{
+					if( !complete )
+					{
+						currentPos_->pos = input.position();
+						return { ParsingResultType::Incomplete, begin };
+					}
+					result.code = RuleMatchCode::False;
+				}
 			}
-			if constexpr( UseActionFunction && detail::tuple_element_index< CRule, ActionFunction::Rules >::value != ( std::size_t )-1 )
+			else if( complete )
+				result.code = RuleMatchCode::False;
+			else
+			{
+				currentPos_->pos = input.position();
+				return { ParsingResultType::Incomplete, begin };
+			}
+
+		ProcessResult:
+			if( result.code == RuleMatchCode::CallNested )
+			{
+				currentPos_->nestedIndex = result.callIndex;
+				currentPos_->pos = input.position();
+				std::size_t ruleIndex = currentPos_->ruleIndex;
+				++currentPos_;
+				currentPos_->ruleIndex = ruleInfos_[ruleIndex].nestedRuleIndexes[result.callIndex];
+				currentPos_->beginPos = ( std::size_t )( input.current() - begin );
+				currentPos_->pos = input.position();
+				rule = pushRule( currentPos_->ruleIndex );
+				input = RuleInput( input.current(), input.end() );
+				continue;
+			}
+			else
+			{
+				if( currentPos_ == &positions_.front() )
+				{
+					reset();
+					if( result.code == RuleMatchCode::True )
+					{
+						const char* end_ = begin + input.position();
+						callAction( currentPos_, rule, 0, begin, end_ );
+						return { ParsingResultType::True, end_ };
+					}
+					return { ParsingResultType::False, begin };
+				}
+				if( result.code == RuleMatchCode::True )
+				{
+					const char* begin_ = begin + currentPos_->beginPos;
+					callAction( currentPos_, rule, currentPos_->beginPos, begin_, begin_ + input.position() );
+				}
+				RuleInput nestedInput = input;
+				NestedRuleResult nestedResult( nestedInput );
+				nestedResult.rule = rule;
+				popRule( currentPos_->ruleIndex );
+				rule = topRule( ( --currentPos_ )->ruleIndex );
+				input = RuleInput( begin + currentPos_->beginPos, end, currentPos_->pos );
+				nestedResult.index = currentPos_->nestedIndex;
+				nestedResult.result = result.code == RuleMatchCode::True;
+				result = rule->nestedResult( input, states_, nestedResult );
+				if( result.code == RuleMatchCode::TrueCanMore )
+				{
+					if( complete )
+					{
+						result.code = RuleMatchCode::True;
+						goto ProcessResult;
+					}
+					currentPos_->pos = input.position();
+					return { ParsingResultType::Incomplete, begin };
+				}
+				else if( result.code == RuleMatchCode::NotTrueYet )
+				{
+					if( complete )
+					{
+						result.code = RuleMatchCode::False;
+						goto ProcessResult;
+					}
+					currentPos_->pos = input.position();
+					return { ParsingResultType::Incomplete, begin };
+				}
+				goto ProcessResult;
+			}
+		}
+		return { ParsingResultType::False, begin };
+	}
+
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	void Parser< Rule, ActionFunction, RulePositioning >::reset()
+	{
+		for( ; currentPos_ != &positions_.front(); --currentPos_ )
+			popRule( currentPos_->ruleIndex );
+		popRule( currentPos_->ruleIndex );
+		pushRule( currentPos_->ruleIndex );
+		currentPos_->pos = 0;
+	}
+
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	template< std::size_t Id >
+	inline void Parser< Rule, ActionFunction, RulePositioning >::initIndex( std::size_t& n )
+	{
+		indexes_[n++] = ( IndexType )Id;
+	}
+
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	template< std::size_t... Ids >
+	inline void Parser< Rule, ActionFunction, RulePositioning >::initIndexes( std::size_t& n, std::index_sequence< Ids... > )
+	{
+		( initIndex< Ids >( n ), ... );
+	}
+
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	template< std::size_t Id >
+	inline void Parser< Rule, ActionFunction, RulePositioning >::initRule( std::size_t& n )
+	{
+		using CRule = std::tuple_element_t< Id, UniqueRules >;
+		ruleInfos_[Id].constructor = &detail::RuleConstructorStorage< CRule >::constructor;
+		if constexpr( std::tuple_size_v< typename CRule::Rules > != 0 )
+		{
+			ruleInfos_[Id].nestedRuleIndexes = &indexes_[n];
+			initIndexes( n, detail::index_sequence_for_part_in_whole_t< UniqueRules, typename CRule::Rules >{} );
+		}
+		else
+			ruleInfos_[Id].nestedRuleIndexes = nullptr;
+		if constexpr( UseActionFunction )
+		{
+			if constexpr( detail::tuple_element_index< CRule, ActionFunction::Rules >::value != ( std::size_t )-1 )
 			{
 				if constexpr( UseRulePosition )
 					ruleInfos_[Id].func = &detail::ruleActionFunctionPos< CRule, ActionFunction >;
 				else
 					ruleInfos_[Id].func = &detail::ruleActionFunction< CRule, ActionFunction >;
 			}
+			else
+				ruleInfos_[Id].func = nullptr;
 		}
+	}
 
-		template< std::size_t... Ids >
-		void initRuleInfos( std::index_sequence< Ids... > )
-		{
-			std::size_t n = 0;
-			( initRule< Ids >( n ), ... );
-		}
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	template< std::size_t... Ids >
+	void Parser< Rule, ActionFunction, RulePositioning >::initRuleInfos( std::index_sequence< Ids... > )
+	{
+		std::size_t n = 0;
+		( initRule< Ids >( n ), ... );
+	}
 
-		void callAction( std::size_t beginPos, const char* begin, const char* end )
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	void Parser< Rule, ActionFunction, RulePositioning >::callAction( Position* pos, RuleBase* rule, std::size_t beginPos, const char* begin, const char* end )
+	{
+		if constexpr( UseActionFunction )
 		{
-			if constexpr( UseActionFunction )
+			auto func = ruleInfos_[pos->ruleIndex].func;
+			if( func )
 			{
-				if( current_->func )
+				if constexpr( UseRulePosition )
 				{
-					if constexpr( UseRulePosition )
+					std::array< std::size_t, MaxDeep > rpos;
+					auto it = rpos.end();
+					while( pos != &positions_.front() )
 					{
-						std::array< std::size_t, MaxDeep > pos;
-						auto it = pos.end();
-						auto info = current_;
-						while( info != &ruleInfos_.front() )
-						{
-							--it;
-							info = &ruleInfos_[info->prevIndex];
-							*it = info->nextIndex;
-						}
-						std::size_t n = pos.end() - it;
-						if( n )
-							current_->func( actionFunc_, std::span< const std::size_t >( &*it, n ), current_->rule, beginPos, begin, end );
-						else
-							current_->func( actionFunc_, std::span< const std::size_t >(), current_->rule, beginPos, begin, end );
+						--it;
+						--pos;
+						*it = pos->nestedIndex;
 					}
+					std::size_t n = rpos.end() - it;
+					if( n )
+						func( actionFunc_, std::span< const std::size_t >( &*it, n ), rule, beginPos, begin, end );
 					else
-						current_->func( actionFunc_, current_->rule, beginPos, begin, end );
+						func( actionFunc_, std::span< const std::size_t >(), rule, beginPos, begin, end );
 				}
+				else
+					func( actionFunc_, rule, beginPos, begin, end );
 			}
 		}
+	}
 
-	private:
-		using _RuleActionFunction = void ( * )( ActionFunction&, const RuleBase*, std::size_t, const char*, const char* );
-		using _RuleActionFunctionPos = void ( * )( ActionFunction&, const std::span< const std::size_t >&, const RuleBase*, std::size_t, const char*, const char* );
-		using RuleActionFunction = std::conditional_t< UseRulePosition, _RuleActionFunctionPos, _RuleActionFunction >;
-		ActionFunction actionFunc_;
-		void* states_ = nullptr;
-		UniqueRules rules_;
-		struct _RuleInfoV0
-		{
-			RuleBase* rule;
-			IndexType* nestedRuleIndexes;
-			std::size_t nextIndex = 0;
-			std::size_t prevIndex = 0;
-			std::size_t beginPos = 0;
-			std::size_t pos = 0;
-			RuleActionFunction func = nullptr;
-		};
-		struct _RuleInfoV1
-		{
-			RuleBase* rule;
-			IndexType* nestedRuleIndexes;
-			std::size_t nextIndex = 0;
-			std::size_t prevIndex = 0;
-			std::size_t beginPos = 0;
-			std::size_t pos = 0;
-		};
-		using RuleInfo = std::conditional_t< UseActionFunction, _RuleInfoV0, _RuleInfoV1 >;
-		std::array< RuleInfo, std::tuple_size_v< UniqueRules > > ruleInfos_;
-		std::array< IndexType, IndexArraySize > indexes_;
-		RuleInfo* current_;
-	};
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	RuleBase* Parser< Rule, ActionFunction, RulePositioning >::pushRule( std::size_t index )
+	{
+		RuleBase* rule = ruleInfos_[index].constructor->construct( stackTop_ );
+		stackTop_ += ruleInfos_[index].constructor->size();
+		assert( stackTop_ <= &ruleStackData_.back() + 1 );
+		return rule;
+	}
+
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	void Parser< Rule, ActionFunction, RulePositioning >::popRule( std::size_t index )
+	{
+		stackTop_ -= ruleInfos_[index].constructor->size();
+		reinterpret_cast< RuleBase* >( stackTop_ )->~RuleBase();
+	}
+
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	RuleBase* Parser< Rule, ActionFunction, RulePositioning >::topRule( std::size_t index )
+	{
+		return reinterpret_cast< RuleBase* >( stackTop_ - ruleInfos_[index].constructor->size() );
+	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////
@@ -624,10 +746,6 @@ namespace psm
 			one_ = true;
 			input.setCurrent( nestedResult.input.current() );
 			return { RuleMatchCode::CallNested, 0 };
-		}
-		void reset() override
-		{
-			one_ = false;
 		}
 	};
 
@@ -749,10 +867,6 @@ namespace psm
 				return { RuleMatchCode::NotTrueYet };
 			}
 		}
-		void reset() override
-		{
-			n_ = N;
-		}
 	};
 
 	template< std::size_t Min, std::size_t Max, typename Rule >
@@ -778,10 +892,6 @@ namespace psm
 			if( n_ >= Min )
 				return { RuleMatchCode::True };
 			return { RuleMatchCode::False };
-		}
-		void reset() override
-		{
-			n_ = 0;
 		}
 	};
 
