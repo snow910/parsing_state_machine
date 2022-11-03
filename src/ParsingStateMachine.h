@@ -3,6 +3,8 @@
 #include <array>
 #include <assert.h>
 #include <span>
+#include <stdint.h>
+#include <tuple>
 #include <type_traits>
 
 // Parsing state machine
@@ -632,7 +634,7 @@ namespace psm
 			ruleInfos_[Id].nestedRuleIndexes = nullptr;
 		if constexpr( UseActionFunction )
 		{
-			if constexpr( detail::tuple_element_index< CRule, ActionFunction::Rules >::value != ( std::size_t )-1 )
+			if constexpr( detail::tuple_element_index< CRule, typename ActionFunction::Rules >::value != ( std::size_t )-1 )
 			{
 				if constexpr( UseRulePosition )
 					ruleInfos_[Id].func = &detail::ruleActionFunctionPos< CRule, ActionFunction >;
