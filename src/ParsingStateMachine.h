@@ -17,14 +17,8 @@ namespace psm
 	public:
 		inline RuleInput( const char* begin, const char* end ) noexcept
 		    : begin_( begin ), end_( end ), current_( begin ) {}
-		inline RuleInput( const char* begin, const char* end, std::size_t pos ) noexcept
-		    : begin_( begin ), end_( end ), current_( begin + pos )
-		{
-			if( current_ > end_ )
-				current_ = end_;
-		}
-		inline RuleInput( const RuleInput& ) = default;
-		inline RuleInput& operator=( const RuleInput& ) = default;
+		inline RuleInput( const char* begin, const char* end, const char* current ) noexcept
+		    : begin_( begin ), end_( end ), current_( current ) {}
 
 		inline const char* begin() const noexcept { return begin_; }
 		inline const char* current() const noexcept { return current_; }
@@ -38,13 +32,45 @@ namespace psm
 			if( current_ > end_ )
 				current_ = end_;
 		}
-		inline void consume( std::size_t size )
+		inline bool consume( std::size_t size ) noexcept
 		{
 			current_ += size;
 			if( current_ > end_ )
+			{
 				current_ = end_;
+				return false;
+			}
+			return true;
+		}
+		inline bool consume() noexcept
+		{
+			if( current_ != end_ )
+			{
+				++current_;
+				return true;
+			}
+			return false;
 		}
 		inline void discard() noexcept { current_ = begin_; }
+	};
+
+	class RuleInputRef
+	{
+		RuleInput& ref_;
+
+	public:
+		inline RuleInputRef( RuleInput& ref ) : ref_( ref ) {}
+
+		inline const char* begin() const noexcept { return ref_.begin(); }
+		inline const char* current() const noexcept { return ref_.current(); }
+		inline const char* end() const noexcept { return ref_.end(); }
+		inline std::size_t size() const noexcept { return ref_.size(); }
+		inline bool empty() const noexcept { return ref_.empty(); }
+		inline std::size_t position() const noexcept { return ref_.position(); }
+		inline void setCurrent( const char* current ) noexcept { ref_.setCurrent( current ); }
+		inline bool consume( std::size_t size ) noexcept { return ref_.consume( size ); }
+		inline bool consume() noexcept { return ref_.consume(); }
+		inline void discard() noexcept { ref_.discard(); }
 	};
 
 	enum class RuleMatchCode
@@ -79,11 +105,11 @@ namespace psm
 		using Rules = std::tuple<>;
 
 		virtual ~RuleBase() {}
-		virtual RuleResult match( RuleInput& input, void* states )
+		virtual RuleResult match( RuleInputRef input, void* states )
 		{
 			return { RuleMatchCode::False };
 		}
-		virtual RuleResult nestedResult( RuleInput& input, void* states, const NestedRuleResult& nestedResult )
+		virtual RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult )
 		{
 			return { RuleMatchCode::False };
 		}
@@ -347,11 +373,15 @@ namespace psm
 		};
 	} // namespace detail
 
-	enum class ParsingResultType
+	struct ParsingResult
 	{
-		True,
-		False,
-		Incomplete
+		enum class Type
+		{
+			True,
+			False,
+			Incomplete
+		} type;
+		const char* after;
 	};
 
 	class ParserBase
@@ -359,11 +389,11 @@ namespace psm
 	public:
 		virtual ~ParserBase() {}
 
-		virtual std::pair< ParsingResultType, const char* > parse( const char* begin, const char* end, bool complete = true ) = 0;
+		virtual ParsingResult parse( const char* begin, const char* end, bool complete = true ) = 0;
 		virtual void reset() = 0;
 
 		template< std::size_t N >
-		inline std::pair< ParsingResultType, const char* > parseString( const char ( &str )[N] ) { return parse( str, str + N - 1 ); }
+		inline ParsingResult parseString( const char ( &str )[N] ) { return parse( str, str + N - 1 ); }
 	};
 
 	// ActionFunction is a functional object type that contains Rules (a std::tuple alias) of interesting rules
@@ -385,7 +415,7 @@ namespace psm
 		inline void setActionFunction( ActionFunction func );
 		inline void setStates( void* states );
 
-		std::pair< ParsingResultType, const char* > parse( const char* begin, const char* end, bool complete ) override;
+		ParsingResult parse( const char* begin, const char* end, bool complete = true ) override;
 		void reset() override;
 
 	private:
@@ -409,6 +439,8 @@ namespace psm
 		RuleBase* pushRule( std::size_t index );
 		void popRule( std::size_t index );
 		RuleBase* topRule( std::size_t index );
+		RuleBase* previousRule( std::size_t topIntex, std::size_t prevIndex );
+		bool isRuleStackEmpty() const noexcept;
 
 	private:
 		using _RuleActionFunction = void ( * )( ActionFunction&, const RuleBase*, std::size_t, const char*, const char* );
@@ -418,7 +450,6 @@ namespace psm
 		{
 			std::size_t ruleIndex;
 			std::size_t nestedIndex = 0;
-			std::size_t beginPos;
 			std::size_t pos;
 		};
 		struct _RuleInfoV0
@@ -448,11 +479,9 @@ namespace psm
 	{
 		initRuleInfos( std::make_index_sequence< std::tuple_size_v< UniqueRules > >{} );
 		currentPos_ = &positions_.front();
-		currentPos_->beginPos = 0;
 		currentPos_->pos = 0;
 		currentPos_->ruleIndex = std::tuple_size_v< UniqueRules > - 1;
 		stackTop_ = &ruleStackData_.front();
-		pushRule( currentPos_->ruleIndex );
 	}
 
 	template< typename Rule, typename ActionFunction, bool RulePositioning >
@@ -460,19 +489,16 @@ namespace psm
 	{
 		initRuleInfos( std::make_index_sequence< std::tuple_size_v< UniqueRules > >{} );
 		currentPos_ = &positions_.front();
-		currentPos_->beginPos = 0;
 		currentPos_->pos = 0;
 		currentPos_->ruleIndex = std::tuple_size_v< UniqueRules > - 1;
 		stackTop_ = &ruleStackData_.front();
-		pushRule( currentPos_->ruleIndex );
 	}
 
 	template< typename Rule, typename ActionFunction, bool RulePositioning >
 	Parser< Rule, ActionFunction, RulePositioning >::~Parser()
 	{
-		for( ; currentPos_ != &positions_.front(); --currentPos_ )
+		for( ; !isRuleStackEmpty(); --currentPos_ )
 			popRule( currentPos_->ruleIndex );
-		popRule( currentPos_->ruleIndex );
 	}
 
 	template< typename Rule, typename ActionFunction, bool RulePositioning >
@@ -488,13 +514,22 @@ namespace psm
 	}
 
 	template< typename Rule, typename ActionFunction, bool RulePositioning >
-	std::pair< ParsingResultType, const char* > Parser< Rule, ActionFunction, RulePositioning >::parse( const char* begin, const char* end, bool complete )
+	ParsingResult Parser< Rule, ActionFunction, RulePositioning >::parse( const char* begin, const char* end, bool complete )
 	{
-		if( begin == end && !complete )
-			return { ParsingResultType::Incomplete, begin };
+		if( begin == end )
+		{
+			if( !complete )
+				return { ParsingResult::Type::Incomplete, begin };
+			else if( isRuleStackEmpty() )
+				return { ParsingResult::Type::False, begin };
+		}
 
-		RuleBase* rule = reinterpret_cast< RuleBase* >( stackTop_ - ruleInfos_[currentPos_->ruleIndex].constructor->size() );
-		RuleInput input( begin + currentPos_->beginPos, end, currentPos_->pos );
+		RuleBase* rule;
+		if( isRuleStackEmpty() )
+			rule = pushRule( currentPos_->ruleIndex );
+		else
+			rule = topRule( currentPos_->ruleIndex );
+		RuleInput input( begin + ( currentPos_ == &positions_.front() ? 0 : ( currentPos_ - 1 )->pos ), end, begin + currentPos_->pos );
 		RuleResult result;
 		while( true )
 		{
@@ -505,8 +540,8 @@ namespace psm
 				{
 					if( !complete )
 					{
-						currentPos_->pos = input.position();
-						return { ParsingResultType::Incomplete, begin };
+						currentPos_->pos = input.current() - begin;
+						return { ParsingResult::Type::Incomplete, begin };
 					}
 					result.code = RuleMatchCode::True;
 				}
@@ -514,8 +549,8 @@ namespace psm
 				{
 					if( !complete )
 					{
-						currentPos_->pos = input.position();
-						return { ParsingResultType::Incomplete, begin };
+						currentPos_->pos = input.current() - begin;
+						return { ParsingResult::Type::Incomplete, begin };
 					}
 					result.code = RuleMatchCode::False;
 				}
@@ -524,20 +559,19 @@ namespace psm
 				result.code = RuleMatchCode::False;
 			else
 			{
-				currentPos_->pos = input.position();
-				return { ParsingResultType::Incomplete, begin };
+				currentPos_->pos = input.current() - begin;
+				return { ParsingResult::Type::Incomplete, begin };
 			}
 
 		ProcessResult:
 			if( result.code == RuleMatchCode::CallNested )
 			{
 				currentPos_->nestedIndex = result.callIndex;
-				currentPos_->pos = input.position();
+				currentPos_->pos = input.current() - begin;
 				std::size_t ruleIndex = currentPos_->ruleIndex;
 				++currentPos_;
 				currentPos_->ruleIndex = ruleInfos_[ruleIndex].nestedRuleIndexes[result.callIndex];
-				currentPos_->beginPos = ( std::size_t )( input.current() - begin );
-				currentPos_->pos = input.position();
+				currentPos_->pos = input.current() - begin;
 				rule = pushRule( currentPos_->ruleIndex );
 				input = RuleInput( input.current(), input.end() );
 				continue;
@@ -546,29 +580,36 @@ namespace psm
 			{
 				if( currentPos_ == &positions_.front() )
 				{
-					reset();
 					if( result.code == RuleMatchCode::True )
 					{
 						const char* end_ = begin + input.position();
 						callAction( currentPos_, rule, 0, begin, end_ );
-						return { ParsingResultType::True, end_ };
+						popRule( currentPos_->ruleIndex );
+						currentPos_->pos = 0;
+						return { ParsingResult::Type::True, end_ };
 					}
-					return { ParsingResultType::False, begin };
+					popRule( currentPos_->ruleIndex );
+					currentPos_->pos = 0;
+					return { ParsingResult::Type::False, begin };
 				}
 				if( result.code == RuleMatchCode::True )
 				{
-					const char* begin_ = begin + currentPos_->beginPos;
-					callAction( currentPos_, rule, currentPos_->beginPos, begin_, begin_ + input.position() );
+					std::size_t beginPos = ( currentPos_ - 1 )->pos;
+					const char* begin_ = begin + beginPos;
+					callAction( currentPos_, rule, beginPos, begin_, begin_ + input.position() );
 				}
 				RuleInput nestedInput = input;
 				NestedRuleResult nestedResult( nestedInput );
 				nestedResult.rule = rule;
-				popRule( currentPos_->ruleIndex );
-				rule = topRule( ( --currentPos_ )->ruleIndex );
-				input = RuleInput( begin + currentPos_->beginPos, end, currentPos_->pos );
-				nestedResult.index = currentPos_->nestedIndex;
+				auto prevPos = currentPos_ - 1;
+				auto prevRule = previousRule( currentPos_->ruleIndex, prevPos->ruleIndex );
+				nestedResult.index = prevPos->nestedIndex;
 				nestedResult.result = result.code == RuleMatchCode::True;
-				result = rule->nestedResult( input, states_, nestedResult );
+				input = RuleInput( begin + ( prevPos == &positions_.front() ? 0 : ( prevPos - 1 )->pos ), end, begin + prevPos->pos );
+				result = prevRule->nestedResult( input, states_, nestedResult );
+				popRule( currentPos_->ruleIndex );
+				rule = prevRule;
+				currentPos_ = prevPos;
 				if( result.code == RuleMatchCode::TrueCanMore )
 				{
 					if( complete )
@@ -577,7 +618,7 @@ namespace psm
 						goto ProcessResult;
 					}
 					currentPos_->pos = input.position();
-					return { ParsingResultType::Incomplete, begin };
+					return { ParsingResult::Type::Incomplete, begin };
 				}
 				else if( result.code == RuleMatchCode::NotTrueYet )
 				{
@@ -587,21 +628,19 @@ namespace psm
 						goto ProcessResult;
 					}
 					currentPos_->pos = input.position();
-					return { ParsingResultType::Incomplete, begin };
+					return { ParsingResult::Type::Incomplete, begin };
 				}
 				goto ProcessResult;
 			}
 		}
-		return { ParsingResultType::False, begin };
+		return { ParsingResult::Type::False, begin };
 	}
 
 	template< typename Rule, typename ActionFunction, bool RulePositioning >
 	void Parser< Rule, ActionFunction, RulePositioning >::reset()
 	{
-		for( ; currentPos_ != &positions_.front(); --currentPos_ )
+		for( ; !isRuleStackEmpty(); --currentPos_ )
 			popRule( currentPos_->ruleIndex );
-		popRule( currentPos_->ruleIndex );
-		pushRule( currentPos_->ruleIndex );
 		currentPos_->pos = 0;
 	}
 
@@ -706,17 +745,29 @@ namespace psm
 		return reinterpret_cast< RuleBase* >( stackTop_ - ruleInfos_[index].constructor->size() );
 	}
 
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	RuleBase* Parser< Rule, ActionFunction, RulePositioning >::previousRule( std::size_t topIntex, std::size_t prevIndex )
+	{
+		return reinterpret_cast< RuleBase* >( stackTop_ - ruleInfos_[topIntex].constructor->size() - ruleInfos_[prevIndex].constructor->size() );
+	}
+
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	bool Parser< Rule, ActionFunction, RulePositioning >::isRuleStackEmpty() const noexcept
+	{
+		return stackTop_ == &ruleStackData_.front();
+	}
+
 	///////////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////
 
-	template< char Begin_, char End_ >
+	template< char Begin, char End >
 	class Range : public RuleBase
 	{
 	public:
-		RuleResult match( RuleInput& input, void* states ) override
+		RuleResult match( RuleInputRef input, void* states ) override
 		{
-			if( *input.current() >= Begin_ && *input.current() <= End_ )
+			if( *input.current() >= Begin && *input.current() <= End )
 			{
 				input.consume( 1 );
 				return { RuleMatchCode::True };
@@ -733,11 +784,11 @@ namespace psm
 	public:
 		using Rules = std::tuple< Rule >;
 
-		RuleResult match( RuleInput& input, void* states ) override
+		RuleResult match( RuleInputRef input, void* states ) override
 		{
 			return { RuleMatchCode::CallNested, 0 };
 		}
-		RuleResult nestedResult( RuleInput& input, void* states, const NestedRuleResult& nestedResult ) override
+		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
 		{
 			if( !nestedResult.result )
 			{
@@ -757,11 +808,11 @@ namespace psm
 	public:
 		using Rules = std::tuple< Rule >;
 
-		RuleResult match( RuleInput& input, void* states ) override
+		RuleResult match( RuleInputRef input, void* states ) override
 		{
 			return { RuleMatchCode::CallNested, 0 };
 		}
-		RuleResult nestedResult( RuleInput& input, void* states, const NestedRuleResult& nestedResult ) override
+		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
 		{
 			if( !nestedResult.result )
 				return { RuleMatchCode::True };
@@ -775,11 +826,11 @@ namespace psm
 	{
 	public:
 		using Rules = std::tuple< Rule >;
-		RuleResult match( RuleInput& input, void* states ) override
+		RuleResult match( RuleInputRef input, void* states ) override
 		{
 			return { RuleMatchCode::CallNested, 0 };
 		}
-		RuleResult nestedResult( RuleInput& input, void* states, const NestedRuleResult& nestedResult ) override
+		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
 		{
 			if( nestedResult.result )
 				input.setCurrent( nestedResult.input.current() );
@@ -793,11 +844,11 @@ namespace psm
 	public:
 		using Rules = std::tuple< Rule, Others... >;
 		static constexpr std::size_t ChildrenCount = std::tuple_size_v< Rules >;
-		RuleResult match( RuleInput& input, void* states ) override
+		RuleResult match( RuleInputRef input, void* states ) override
 		{
 			return { RuleMatchCode::CallNested, 0 };
 		}
-		RuleResult nestedResult( RuleInput& input, void* states, const NestedRuleResult& nestedResult ) override
+		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
 		{
 			if( nestedResult.result )
 			{
@@ -816,11 +867,11 @@ namespace psm
 	public:
 		using Rules = std::tuple< Rule, Others... >;
 		static constexpr std::size_t ChildrenCount = std::tuple_size_v< Rules >;
-		RuleResult match( RuleInput& input, void* states ) override
+		RuleResult match( RuleInputRef input, void* states ) override
 		{
 			return { RuleMatchCode::CallNested, 0 };
 		}
-		RuleResult nestedResult( RuleInput& input, void* states, const NestedRuleResult& nestedResult ) override
+		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
 		{
 			if( nestedResult.result )
 			{
@@ -837,7 +888,7 @@ namespace psm
 	class Char : public RuleBase
 	{
 	public:
-		RuleResult match( RuleInput& input, void* states ) override
+		RuleResult match( RuleInputRef input, void* states ) override
 		{
 			if( *input.current() == C )
 			{
@@ -848,26 +899,25 @@ namespace psm
 		}
 	};
 
-	template< std::size_t N >
-	class Whatever : public RuleBase
+	class Any : public RuleBase
 	{
-		std::size_t n_ = N;
-
 	public:
-		RuleResult match( RuleInput& input, void* states ) override
+		RuleResult match( RuleInputRef input, void* states ) override
 		{
-			auto n = input.size();
-			if( n > n_ )
-			{
-				input.consume( n_ );
+			input.consume();
+			return { RuleMatchCode::True };
+		}
+	};
+
+	template< std::size_t N >
+	class AnyN : public RuleBase
+	{
+	public:
+		RuleResult match( RuleInputRef input, void* states ) override
+		{
+			if( input.consume( N - input.position() ) )
 				return { RuleMatchCode::True };
-			}
-			else
-			{
-				input.consume( n );
-				n_ -= n;
-				return { RuleMatchCode::NotTrueYet };
-			}
+			return { RuleMatchCode::NotTrueYet };
 		}
 	};
 
@@ -879,14 +929,15 @@ namespace psm
 
 	public:
 		using Rules = std::tuple< Rule >;
-		RuleResult match( RuleInput& input, void* states ) override
+		RuleResult match( RuleInputRef input, void* states ) override
 		{
 			return { RuleMatchCode::CallNested, 0 };
 		}
-		RuleResult nestedResult( RuleInput& input, void* states, const NestedRuleResult& nestedResult ) override
+		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
 		{
 			if( nestedResult.result )
 			{
+				input.setCurrent( nestedResult.input.current() );
 				if( ++n_ == Max )
 					return { RuleMatchCode::True };
 				return { RuleMatchCode::CallNested, 0 };
@@ -894,6 +945,23 @@ namespace psm
 			if( n_ >= Min )
 				return { RuleMatchCode::True };
 			return { RuleMatchCode::False };
+		}
+	};
+
+	template< std::size_t Min, std::size_t Max >
+	class RepMinMax< Min, Max, Any > : public RuleBase
+	{
+		static_assert( Min <= Max && Max != 0, "wrong parameters" );
+		std::size_t n_ = 0;
+
+	public:
+		RuleResult match( RuleInputRef input, void* states ) override
+		{
+			if( input.consume( Max - input.position() ) )
+				return { RuleMatchCode::True };
+			if( input.position() >= Min )
+				return { RuleMatchCode::True };
+			return { RuleMatchCode::NotTrueYet };
 		}
 	};
 
@@ -917,16 +985,20 @@ namespace psm
 	{
 	public:
 		using Rules = std::tuple< Rule >;
-		RuleResult match( RuleInput& input, void* states ) override
+		RuleResult match( RuleInputRef input, void* states ) override
 		{
 			return { RuleMatchCode::CallNested, 0 };
 		}
-		RuleResult nestedResult( RuleInput& input, void* states, const NestedRuleResult& nestedResult ) override
+		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
 		{
 			if( nestedResult.result )
 				return { RuleMatchCode::True };
 			if( input.position() < Max )
-				return { RuleMatchCode::CallNested, 0 };
+			{
+				if( input.consume() )
+					return { RuleMatchCode::CallNested, 0 };
+				return { RuleMatchCode::NotTrueYet };
+			}
 			return { RuleMatchCode::False };
 		}
 	};
