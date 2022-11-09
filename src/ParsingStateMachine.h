@@ -371,6 +371,10 @@ namespace psm
 		{
 			using Rules = std::tuple<>;
 		};
+
+		struct NaR // not a rule
+		{
+		};
 	} // namespace detail
 
 	struct ParsingResult
@@ -586,6 +590,8 @@ namespace psm
 						callAction( currentPos_, rule, 0, begin, end_ );
 						popRule( currentPos_->ruleIndex );
 						currentPos_->pos = 0;
+						if( begin == end_ )
+							return { ParsingResult::Type::False, begin };
 						return { ParsingResult::Type::True, end_ };
 					}
 					popRule( currentPos_->ruleIndex );
@@ -769,7 +775,22 @@ namespace psm
 		{
 			if( *input.current() >= Begin && *input.current() <= End )
 			{
-				input.consume( 1 );
+				input.consume();
+				return { RuleMatchCode::True };
+			}
+			return { RuleMatchCode::False };
+		}
+	};
+
+	template< char Begin, char End >
+	class NotRange : public RuleBase
+	{
+	public:
+		RuleResult match( RuleInputRef input, void* states ) override
+		{
+			if( *input.current() <= Begin || *input.current() >= End )
+			{
+				input.consume();
 				return { RuleMatchCode::True };
 			}
 			return { RuleMatchCode::False };
@@ -861,6 +882,59 @@ namespace psm
 		}
 	};
 
+	template< typename Condition, typename Then, typename Else = detail::NaR >
+	class If : public RuleBase
+	{
+	public:
+		using Rules = std::conditional_t< std::is_same_v< Else, detail::NaR >, std::tuple< Condition, Then >, std::tuple< Condition, Then, Else > >;
+		RuleResult match( RuleInputRef input, void* states ) override
+		{
+			return { RuleMatchCode::CallNested, 0 };
+		}
+		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
+		{
+			if( nestedResult.index == 0 )
+			{
+				if( nestedResult.result )
+				{
+					input.setCurrent( nestedResult.input.current() );
+					return { RuleMatchCode::CallNested, 1 };
+				}
+				else
+				{
+					if constexpr( std::is_same_v< Else, detail::NaR > )
+						return { RuleMatchCode::True };
+					return { RuleMatchCode::CallNested, 2 };
+				}
+			}
+			if( nestedResult.result )
+			{
+				input.setCurrent( nestedResult.input.current() );
+				return { RuleMatchCode::True };
+			}
+			else
+				return { RuleMatchCode::False };
+		}
+	};
+
+	template< typename Rule >
+	class Not : public RuleBase
+	{
+	public:
+		using Rules = std::tuple< Rule >;
+		RuleResult match( RuleInputRef input, void* states ) override
+		{
+			return { RuleMatchCode::CallNested, 0 };
+		}
+		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
+		{
+			if( nestedResult.result )
+				return { RuleMatchCode::False };
+			else
+				return { RuleMatchCode::True };
+		}
+	};
+
 	template< typename Rule, typename... Others >
 	class Seq : public RuleBase
 	{
@@ -892,10 +966,30 @@ namespace psm
 		{
 			if( *input.current() == C )
 			{
-				input.consume( 1 );
+				input.consume();
 				return { RuleMatchCode::True };
 			}
 			return { RuleMatchCode::False };
+		}
+	};
+
+	template< char C, char... Cs >
+	class Str : public RuleBase
+	{
+	public:
+		RuleResult match( RuleInputRef input, void* states ) override
+		{
+			static std::array< const char, sizeof...( Cs ) + 1 > str{ C, Cs... };
+			auto it = str.begin() + input.position();
+			do
+			{
+				if( *input.current() != *it )
+					return { RuleMatchCode::False };
+				if( !input.consume() )
+					return { RuleMatchCode::NotTrueYet };
+				++it;
+			} while( it != str.end() );
+			return { RuleMatchCode::True };
 		}
 	};
 
@@ -1003,7 +1097,7 @@ namespace psm
 		}
 	};
 
-	template< typename Rule, std::size_t Max >
+	template< typename Rule >
 	class Until : public UntilMax< Rule, ( std::size_t )-1 >
 	{
 	};
