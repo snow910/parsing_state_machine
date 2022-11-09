@@ -12,13 +12,13 @@ namespace psm
 {
 	class RuleInput
 	{
-		const char *begin_, *end_, *current_;
+		const char *current_, *begin_, *end_;
 
 	public:
 		inline RuleInput( const char* begin, const char* end ) noexcept
-		    : begin_( begin ), end_( end ), current_( begin ) {}
+		    : current_( begin ), begin_( begin ), end_( end ) {}
 		inline RuleInput( const char* begin, const char* end, const char* current ) noexcept
-		    : begin_( begin ), end_( end ), current_( current ) {}
+		    : current_( current ), begin_( begin ), end_( end ) {}
 
 		inline const char* begin() const noexcept { return begin_; }
 		inline const char* current() const noexcept { return current_; }
@@ -186,13 +186,16 @@ namespace psm
 		{
 		};
 
+		template< typename T, typename Tp >
+		constexpr std::size_t tuple_element_index_v = tuple_element_index< T, Tp >::value;
+
 		template< typename Whole, typename Part >
 		struct index_sequence_for_part_in_whole;
 
 		template< typename Whole, typename... Part >
 		struct index_sequence_for_part_in_whole< Whole, std::tuple< Part... > >
 		{
-			using type = std::index_sequence< tuple_element_index< Part, Whole >::value... >;
+			using type = std::index_sequence< tuple_element_index_v< Part, Whole >... >;
 		};
 
 		template< typename Whole, typename Part >
@@ -227,7 +230,7 @@ namespace psm
 
 		template< typename Unique, typename Other, typename... Others >
 		struct push_unique_types_back< Unique, std::tuple< Other, Others... > >
-		    : std::conditional_t< tuple_element_index< Other, Unique >::value == ( std::size_t )-1,
+		    : std::conditional_t< tuple_element_index_v< Other, Unique > == ( std::size_t )-1,
 					  push_unique_types_back< push_type_back_t< Unique, Other >, std::tuple< Others... > >,
 					  push_unique_types_back< Unique, std::tuple< Others... > > >
 		{
@@ -236,7 +239,7 @@ namespace psm
 		template< typename Unique, typename Other >
 		struct push_unique_types_back< Unique, std::tuple< Other > >
 		{
-			using type = std::conditional_t< tuple_element_index< Other, Unique >::value == ( std::size_t )-1,
+			using type = std::conditional_t< tuple_element_index_v< Other, Unique > == ( std::size_t )-1,
 							 push_type_back_t< Unique, Other >,
 							 Unique >;
 		};
@@ -537,34 +540,24 @@ namespace psm
 		RuleResult result;
 		while( true )
 		{
-			if( input.size() )
+			result = rule->match( input, states_ );
+			if( result.code == RuleMatchCode::TrueCanMore )
 			{
-				result = rule->match( input, states_ );
-				if( result.code == RuleMatchCode::TrueCanMore )
+				if( !complete )
 				{
-					if( !complete )
-					{
-						currentPos_->pos = input.current() - begin;
-						return { ParsingResult::Type::Incomplete, begin };
-					}
-					result.code = RuleMatchCode::True;
+					currentPos_->pos = input.current() - begin;
+					return { ParsingResult::Type::Incomplete, begin };
 				}
-				else if( result.code == RuleMatchCode::NotTrueYet )
-				{
-					if( !complete )
-					{
-						currentPos_->pos = input.current() - begin;
-						return { ParsingResult::Type::Incomplete, begin };
-					}
-					result.code = RuleMatchCode::False;
-				}
+				result.code = RuleMatchCode::True;
 			}
-			else if( complete )
-				result.code = RuleMatchCode::False;
-			else
+			else if( result.code == RuleMatchCode::NotTrueYet )
 			{
-				currentPos_->pos = input.current() - begin;
-				return { ParsingResult::Type::Incomplete, begin };
+				if( !complete )
+				{
+					currentPos_->pos = input.current() - begin;
+					return { ParsingResult::Type::Incomplete, begin };
+				}
+				result.code = RuleMatchCode::False;
 			}
 
 		ProcessResult:
@@ -679,7 +672,7 @@ namespace psm
 			ruleInfos_[Id].nestedRuleIndexes = nullptr;
 		if constexpr( UseActionFunction )
 		{
-			if constexpr( detail::tuple_element_index< CRule, typename ActionFunction::Rules >::value != ( std::size_t )-1 )
+			if constexpr( detail::tuple_element_index_v< CRule, typename ActionFunction::Rules > != ( std::size_t )-1 )
 			{
 				if constexpr( UseRulePosition )
 					ruleInfos_[Id].func = &detail::ruleActionFunctionPos< CRule, ActionFunction >;
@@ -773,6 +766,8 @@ namespace psm
 	public:
 		RuleResult match( RuleInputRef input, void* states ) override
 		{
+			if( input.empty() )
+				return { RuleMatchCode::NotTrueYet };
 			if( *input.current() >= Begin && *input.current() <= End )
 			{
 				input.consume();
@@ -788,7 +783,9 @@ namespace psm
 	public:
 		RuleResult match( RuleInputRef input, void* states ) override
 		{
-			if( *input.current() <= Begin || *input.current() >= End )
+			if( input.empty() )
+				return { RuleMatchCode::NotTrueYet };
+			if( *input.current() < Begin || *input.current() > End )
 			{
 				input.consume();
 				return { RuleMatchCode::True };
@@ -964,6 +961,8 @@ namespace psm
 	public:
 		RuleResult match( RuleInputRef input, void* states ) override
 		{
+			if( input.empty() )
+				return { RuleMatchCode::NotTrueYet };
 			if( *input.current() == C )
 			{
 				input.consume();
@@ -980,15 +979,14 @@ namespace psm
 		RuleResult match( RuleInputRef input, void* states ) override
 		{
 			static std::array< const char, sizeof...( Cs ) + 1 > str{ C, Cs... };
-			auto it = str.begin() + input.position();
-			do
+			if( str.size() - input.position() > input.size() )
+				return { RuleMatchCode::NotTrueYet };
+			for( auto c : str )
 			{
-				if( *input.current() != *it )
+				if( c != *input.current() )
 					return { RuleMatchCode::False };
-				if( !input.consume() )
-					return { RuleMatchCode::NotTrueYet };
-				++it;
-			} while( it != str.end() );
+				input.consume();
+			}
 			return { RuleMatchCode::True };
 		}
 	};
@@ -998,14 +996,17 @@ namespace psm
 	public:
 		RuleResult match( RuleInputRef input, void* states ) override
 		{
-			input.consume();
-			return { RuleMatchCode::True };
+			if( input.consume() )
+				return { RuleMatchCode::True };
+			return { RuleMatchCode::NotTrueYet };
 		}
 	};
 
 	template< std::size_t N >
 	class AnyN : public RuleBase
 	{
+		static_assert( N != 0, "wrong parameter" );
+
 	public:
 		RuleResult match( RuleInputRef input, void* states ) override
 		{
@@ -1100,6 +1101,18 @@ namespace psm
 	template< typename Rule >
 	class Until : public UntilMax< Rule, ( std::size_t )-1 >
 	{
+	};
+
+	class End : public RuleBase
+	{
+	public:
+		using Rules = std::tuple<>;
+		RuleResult match( RuleInputRef input, void* states ) override
+		{
+			if( input.empty() )
+				return { RuleMatchCode::True };
+			return { RuleMatchCode::False };
+		}
 	};
 
 	class Digit : public Range< '0', '9' >
