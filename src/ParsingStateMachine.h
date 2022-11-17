@@ -115,6 +115,37 @@ namespace psm
 		}
 	};
 
+	template< std::size_t Index >
+	struct Tag
+	{
+	};
+
+	using Tag0 = Tag< 0 >;
+	using Tag1 = Tag< 1 >;
+	using Tag2 = Tag< 2 >;
+	using Tag3 = Tag< 3 >;
+	using Tag4 = Tag< 4 >;
+	using Tag5 = Tag< 5 >;
+	using Tag6 = Tag< 6 >;
+	using Tag7 = Tag< 7 >;
+	using Tag8 = Tag< 8 >;
+	using Tag9 = Tag< 9 >;
+
+	template< typename Tag_, std::size_t MaxCount_, typename Rule_ >
+	struct Gen
+	{
+		static_assert( MaxCount_ > 0, "" );
+		using Tag = Tag_;
+		using Rule = Rule_;
+		static constexpr std::size_t MaxCount = MaxCount_;
+	};
+
+	template< typename Tag_ >
+	struct Ref
+	{
+		using Tag = Tag_;
+	};
+
 	namespace detail
 	{
 		template< typename Type, Type V, Type... Vs >
@@ -152,6 +183,9 @@ namespace psm
 		{
 			static constexpr Type value = _max< Type, Vs... >::value;
 		};
+
+		template< typename Type, std::size_t... Vs >
+		constexpr std::size_t max_v = max< Type, Vs... >::value;
 
 		template< typename S >
 		struct integer_sequence_sum;
@@ -295,30 +329,93 @@ namespace psm
 		template< typename... Tuples >
 		using unique_tuple_cat_t = typename unique_tuple_cat< Tuples... >::type;
 
-		//===========================================================================================================================================
+		template< typename Tuple1, typename Tuple2 >
+		struct tuple_cat2;
 
-		template< std::size_t Deep, std::size_t StackSize, typename Rules >
-		struct _rules_info;
-
-		template< std::size_t Deep, std::size_t StackSize, typename... Rules_ >
-		struct _rules_info< Deep, StackSize, std::tuple< Rules_... > >
+		template< typename... Ts1, typename... Ts2 >
+		struct tuple_cat2< std::tuple< Ts1... >, std::tuple< Ts2... > >
 		{
-			static constexpr std::size_t max_deep = max< std::size_t, _rules_info< Deep + 1, StackSize + sizeof( Rules_ ), typename Rules_::Rules >::max_deep... >::value;
-			static constexpr std::size_t stack_size = max< std::size_t, _rules_info< Deep + 1, StackSize + sizeof( Rules_ ), typename Rules_::Rules >::stack_size... >::value;
-			using unique_rules = unique_tuple_cat_t< typename _rules_info< Deep + 1, StackSize + sizeof( Rules_ ), typename Rules_::Rules >::unique_rules..., unique_types_t< std::tuple< Rules_... > > >;
+			using type = std::tuple< Ts1..., Ts2... >;
 		};
 
-		template< std::size_t Deep, std::size_t StackSize >
-		struct _rules_info< Deep, StackSize, std::tuple<> >
+		template< typename... Tuples >
+		struct tuple_cat;
+
+		template< typename Tuple1, typename Tuple2, typename... Others >
+		struct tuple_cat< Tuple1, Tuple2, Others... > : tuple_cat2< typename tuple_cat2< Tuple1, Tuple2 >::type, typename tuple_cat< Others... >::type >
 		{
-			static constexpr std::size_t max_deep = Deep;
-			static constexpr std::size_t stack_size = StackSize;
+		};
+
+		template< typename Tuple1, typename Tuple2 >
+		struct tuple_cat< Tuple1, Tuple2 > : tuple_cat2< Tuple1, Tuple2 >
+		{
+		};
+
+		template< typename Tuple >
+		struct tuple_cat< Tuple >
+		{
+			using type = Tuple;
+		};
+
+		template< typename... Tuples >
+		using tuple_cat_t = tuple_cat< Tuples... >::type;
+
+		//===========================================================================================================================================
+
+		template< typename... RuleInfos >
+		struct unite_rules_info
+		{
+			static constexpr std::size_t max_deep = max_v< std::size_t, RuleInfos::max_deep... >;
+			static constexpr std::size_t stack_size = max_v< std::size_t, RuleInfos::stack_size... >;
+			using unique_rules = unique_tuple_cat_t< typename RuleInfos::unique_rules... >;
+			using generators = tuple_cat_t< typename RuleInfos::generators... >;
+		};
+
+		template<>
+		struct unite_rules_info<>
+		{
+			static constexpr std::size_t max_deep = 0;
+			static constexpr std::size_t stack_size = 0;
 			using unique_rules = std::tuple<>;
+			using generators = std::tuple<>;
 		};
 
 		template< typename Rule >
-		struct rule_info : _rules_info< ( std::size_t )-1, 0, std::tuple< Rule > >
+		struct rule_info;
+
+		template< typename Rules >
+		struct _rules_info;
+
+		template< typename... Rules >
+		struct _rules_info< std::tuple< Rules... > > : unite_rules_info< rule_info< Rules >... >
 		{
+		};
+
+		template< typename Rule >
+		struct rule_info
+		{
+			static constexpr std::size_t max_deep = _rules_info< typename Rule::Rules >::max_deep + 1;
+			static constexpr std::size_t stack_size = _rules_info< typename Rule::Rules >::stack_size + sizeof( Rule );
+			using unique_rules = unique_tuple_cat_t< typename _rules_info< typename Rule::Rules >::unique_rules, std::tuple< Rule > >;
+			using generators = typename _rules_info< typename Rule::Rules >::generators;
+		};
+
+		template< typename Tag, std::size_t MaxCount, typename Rule >
+		struct rule_info< Gen< Tag, MaxCount, Rule > >
+		{
+			static constexpr std::size_t max_deep = rule_info< Rule >::max_deep * MaxCount;
+			static constexpr std::size_t stack_size = rule_info< Rule >::stack_size * MaxCount;
+			using unique_rules = rule_info< Rule >::unique_rules;
+			using generators = push_type_back_t< typename rule_info< Rule >::generators, Gen< Tag, MaxCount, Rule > >;
+		};
+
+		template< typename Tag >
+		struct rule_info< Ref< Tag > >
+		{
+			static constexpr std::size_t max_deep = 0;
+			static constexpr std::size_t stack_size = 0;
+			using unique_rules = std::tuple<>;
+			using generators = std::tuple<>;
 		};
 
 		template< typename Rules >
@@ -329,6 +426,70 @@ namespace psm
 		    : std::integral_constant< std::size_t, integer_sequence_sum< std::index_sequence< std::tuple_size_v< typename Rules_::Rules >... > >::value >
 		{
 		};
+
+		template< typename Tag, typename... Generators >
+		struct _find_generator;
+
+		template< typename Tag_, typename Generator, typename... Generators >
+		struct _find_generator< Tag_, Generator, Generators... >
+		{
+			using type = std::conditional_t< std::is_same_v< Tag_, typename Generator::Tag >, Generator, typename _find_generator< Tag_, Generators... >::type >;
+		};
+
+		template< typename Tag_ >
+		struct _find_generator< Tag_ >
+		{
+			using type = void;
+		};
+
+		template< typename Tag, typename Generators >
+		struct find_generator;
+
+		template< typename Tag, typename... Generators >
+		struct find_generator< Tag, std::tuple< Generators... > > : _find_generator< Tag, Generators... >
+		{
+		};
+
+		template< typename Tag, typename Generators >
+		using find_generator_t = typename find_generator< Tag, Generators >::type;
+
+		template< typename Generators, typename Rule >
+		struct _gen_ref_substitution
+		{
+			using type = Rule;
+		};
+
+		template< typename Generators, typename Tag, std::size_t MaxCount, typename Rule >
+		struct _gen_ref_substitution< Generators, Gen< Tag, MaxCount, Rule > >
+		{
+			using type = Rule;
+		};
+
+		template< typename Generators, typename Tag >
+		struct _gen_ref_substitution< Generators, Ref< Tag > >
+		{
+			using generator = find_generator_t< Tag, Generators >;
+			static_assert( !std::is_same_v< generator, void >, "tag not found" );
+			using type = generator::Rule;
+		};
+
+		template< typename Generators, typename Rules >
+		struct gen_ref_substitution;
+
+		template< typename Generators, typename... Rules >
+		struct gen_ref_substitution< Generators, std::tuple< Rules... > >
+		{
+			using type = std::tuple< typename _gen_ref_substitution< Generators, Rules >::type... >;
+		};
+
+		template< typename Rules >
+		struct gen_ref_substitution< std::tuple<>, Rules >
+		{
+			using type = Rules;
+		};
+
+		template< typename Generators, typename Rules >
+		using gen_ref_substitution_t = typename gen_ref_substitution< Generators, Rules >::type;
 
 		struct RuleConstructorBase
 		{
@@ -409,7 +570,8 @@ namespace psm
 	{
 	public:
 		using UniqueRules = typename detail::rule_info< Rule >::unique_rules;
-		static constexpr std::size_t MaxDeep = detail::rule_info< Rule >::max_deep;
+		using Generators = typename detail::rule_info< Rule >::generators;
+		static constexpr std::size_t MaxDeep = detail::rule_info< Rule >::max_deep - 1;
 		static constexpr bool UseActionFunction = std::tuple_size_v< typename ActionFunction::Rules > != 0;
 		static constexpr bool UseRulePosition = UseActionFunction && RulePositioning;
 
@@ -475,7 +637,7 @@ namespace psm
 		void* states_ = nullptr;
 		std::array< RuleInfo, std::tuple_size_v< UniqueRules > > ruleInfos_;
 		std::array< IndexType, IndexArraySize > indexes_;
-		std::array< Position, detail::rule_info< Rule >::max_deep + 1 > positions_;
+		std::array< Position, detail::rule_info< Rule >::max_deep > positions_;
 		std::array< uint8_t, detail::rule_info< Rule >::stack_size > ruleStackData_;
 		Position* currentPos_;
 		uint8_t* stackTop_;
@@ -563,6 +725,14 @@ namespace psm
 		ProcessResult:
 			if( result.code == RuleMatchCode::CallNested )
 			{
+				if constexpr( std::tuple_size_v< Generators > )
+				{
+					if( currentPos_ == &positions_.back() )
+					{
+						reset();
+						return { ParsingResult::Type::False, begin };
+					}
+				}
 				currentPos_->nestedIndex = result.callIndex;
 				currentPos_->pos = input.current() - begin;
 				std::size_t ruleIndex = currentPos_->ruleIndex;
@@ -571,6 +741,15 @@ namespace psm
 				currentPos_->pos = input.current() - begin;
 				rule = pushRule( currentPos_->ruleIndex );
 				input = RuleInput( input.current(), input.end() );
+				if constexpr( std::tuple_size_v< Generators > )
+				{
+					if( rule == nullptr )
+					{
+						--currentPos_;
+						reset();
+						return { ParsingResult::Type::False, begin };
+					}
+				}
 				continue;
 			}
 			else
@@ -666,7 +845,7 @@ namespace psm
 		if constexpr( std::tuple_size_v< typename CRule::Rules > != 0 )
 		{
 			ruleInfos_[Id].nestedRuleIndexes = &indexes_[n];
-			initIndexes( n, detail::index_sequence_for_part_in_whole_t< UniqueRules, typename CRule::Rules >{} );
+			initIndexes( n, detail::index_sequence_for_part_in_whole_t< UniqueRules, detail::gen_ref_substitution_t< Generators, typename CRule::Rules > >{} );
 		}
 		else
 			ruleInfos_[Id].nestedRuleIndexes = nullptr;
@@ -725,6 +904,9 @@ namespace psm
 	template< typename Rule, typename ActionFunction, bool RulePositioning >
 	RuleBase* Parser< Rule, ActionFunction, RulePositioning >::pushRule( std::size_t index )
 	{
+		if constexpr( std::tuple_size_v< Generators > )
+			if( stackTop_ - &ruleStackData_.front() + ruleInfos_[index].constructor->size() > ruleStackData_.size() )
+				return nullptr;
 		RuleBase* rule = ruleInfos_[index].constructor->construct( stackTop_ );
 		stackTop_ += ruleInfos_[index].constructor->size();
 		assert( stackTop_ <= &ruleStackData_.back() + 1 );
@@ -964,6 +1146,23 @@ namespace psm
 			if( input.empty() )
 				return { RuleMatchCode::NotTrueYet };
 			if( *input.current() == C )
+			{
+				input.consume();
+				return { RuleMatchCode::True };
+			}
+			return { RuleMatchCode::False };
+		}
+	};
+
+	template< char C >
+	class NotChar : public RuleBase
+	{
+	public:
+		RuleResult match( RuleInputRef input, void* states ) override
+		{
+			if( input.empty() )
+				return { RuleMatchCode::NotTrueYet };
+			if( *input.current() != C )
 			{
 				input.consume();
 				return { RuleMatchCode::True };
