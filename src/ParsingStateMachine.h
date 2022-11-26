@@ -146,6 +146,11 @@ namespace psm
 		using Tag = Tag_;
 	};
 
+	template< typename Rule >
+	class Quiet : public Rule
+	{
+	};
+
 	namespace detail
 	{
 		template< typename Type, Type V, Type... Vs >
@@ -338,6 +343,9 @@ namespace psm
 			using type = std::tuple< Ts1..., Ts2... >;
 		};
 
+		template< typename Tuple1, typename Tuple2 >
+		using tuple_cat2_t = typename tuple_cat2< Tuple1, Tuple2 >::type;
+
 		template< typename... Tuples >
 		struct tuple_cat;
 
@@ -462,7 +470,7 @@ namespace psm
 		template< typename Generators, typename Tag, std::size_t MaxCount, typename Rule >
 		struct _gen_ref_substitution< Generators, Gen< Tag, MaxCount, Rule > >
 		{
-			using type = Rule;
+			using type = typename _gen_ref_substitution< Generators, Rule >::type;
 		};
 
 		template< typename Generators, typename Tag >
@@ -470,7 +478,7 @@ namespace psm
 		{
 			using generator = find_generator_t< Tag, Generators >;
 			static_assert( !std::is_same_v< generator, void >, "tag not found" );
-			using type = generator::Rule;
+			using type = typename _gen_ref_substitution< Generators, typename generator::Rule >::type;
 		};
 
 		template< typename Generators, typename Rules >
@@ -495,6 +503,7 @@ namespace psm
 		{
 			virtual RuleBase* construct( void* mem ) const noexcept = 0;
 			virtual std::size_t size() const noexcept = 0;
+			virtual bool isQuiet() const noexcept = 0;
 		};
 
 		template< typename Rule >
@@ -507,6 +516,27 @@ namespace psm
 			std::size_t size() const noexcept override
 			{
 				return sizeof( Rule );
+			}
+			bool isQuiet() const noexcept override
+			{
+				return false;
+			}
+		};
+
+		template< typename Rule >
+		struct RuleConstructor< Quiet< Rule > > : RuleConstructorBase
+		{
+			RuleBase* construct( void* mem ) const noexcept override
+			{
+				return new( mem ) Quiet< Rule >;
+			}
+			std::size_t size() const noexcept override
+			{
+				return sizeof( Quiet< Rule > );
+			}
+			bool isQuiet() const noexcept override
+			{
+				return true;
 			}
 		};
 
@@ -568,10 +598,12 @@ namespace psm
 	template< typename Rule, typename ActionFunction = detail::Nothing, bool RulePositioning = false >
 	class Parser : public ParserBase
 	{
+		using RuleTypeInfo = detail::rule_info< Rule >;
+
 	public:
-		using UniqueRules = typename detail::rule_info< Rule >::unique_rules;
-		using Generators = typename detail::rule_info< Rule >::generators;
-		static constexpr std::size_t MaxDeep = detail::rule_info< Rule >::max_deep - 1;
+		using UniqueRules = typename RuleTypeInfo::unique_rules;
+		using Generators = typename RuleTypeInfo::generators;
+		static constexpr std::size_t MaxDeep = RuleTypeInfo::max_deep - 1;
 		static constexpr bool UseActionFunction = std::tuple_size_v< typename ActionFunction::Rules > != 0;
 		static constexpr bool UseRulePosition = UseActionFunction && RulePositioning;
 
@@ -637,10 +669,11 @@ namespace psm
 		void* states_ = nullptr;
 		std::array< RuleInfo, std::tuple_size_v< UniqueRules > > ruleInfos_;
 		std::array< IndexType, IndexArraySize > indexes_;
-		std::array< Position, detail::rule_info< Rule >::max_deep > positions_;
-		std::array< uint8_t, detail::rule_info< Rule >::stack_size > ruleStackData_;
+		std::array< Position, RuleTypeInfo::max_deep > positions_;
+		std::array< uint8_t, RuleTypeInfo::stack_size > ruleStackData_;
 		Position* currentPos_;
 		uint8_t* stackTop_;
+		std::size_t quietCounter_ = 0;
 	};
 
 	template< typename Rule, typename ActionFunction, bool RulePositioning >
@@ -725,7 +758,7 @@ namespace psm
 		ProcessResult:
 			if( result.code == RuleMatchCode::CallNested )
 			{
-				if constexpr( std::tuple_size_v< Generators > )
+				if constexpr( std::tuple_size_v< Generators > != 0 )
 				{
 					if( currentPos_ == &positions_.back() )
 					{
@@ -741,7 +774,7 @@ namespace psm
 				currentPos_->pos = input.current() - begin;
 				rule = pushRule( currentPos_->ruleIndex );
 				input = RuleInput( input.current(), input.end() );
-				if constexpr( std::tuple_size_v< Generators > )
+				if constexpr( std::tuple_size_v< Generators > != 0 )
 				{
 					if( rule == nullptr )
 					{
@@ -876,6 +909,8 @@ namespace psm
 	{
 		if constexpr( UseActionFunction )
 		{
+			if( quietCounter_ )
+				return;
 			auto func = ruleInfos_[pos->ruleIndex].func;
 			if( func )
 			{
@@ -904,11 +939,13 @@ namespace psm
 	template< typename Rule, typename ActionFunction, bool RulePositioning >
 	RuleBase* Parser< Rule, ActionFunction, RulePositioning >::pushRule( std::size_t index )
 	{
-		if constexpr( std::tuple_size_v< Generators > )
+		if constexpr( std::tuple_size_v< Generators > != 0 )
 			if( stackTop_ - &ruleStackData_.front() + ruleInfos_[index].constructor->size() > ruleStackData_.size() )
 				return nullptr;
 		RuleBase* rule = ruleInfos_[index].constructor->construct( stackTop_ );
 		stackTop_ += ruleInfos_[index].constructor->size();
+		if( ruleInfos_[index].constructor->isQuiet() )
+			++quietCounter_;
 		assert( stackTop_ <= &ruleStackData_.back() + 1 );
 		return rule;
 	}
@@ -918,6 +955,8 @@ namespace psm
 	{
 		stackTop_ -= ruleInfos_[index].constructor->size();
 		reinterpret_cast< RuleBase* >( stackTop_ )->~RuleBase();
+		if( ruleInfos_[index].constructor->isQuiet() )
+			--quietCounter_;
 	}
 
 	template< typename Rule, typename ActionFunction, bool RulePositioning >
