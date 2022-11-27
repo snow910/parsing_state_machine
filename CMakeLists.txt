@@ -10,20 +10,35 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Catch2)
 
-add_library(${PROJECT_NAME}
-	src/ParsingStateMachine.h
-	src/ParsingStateMachine.cpp
+add_library(${PROJECT_NAME} INTERFACE
+	src/rule/AnyRule.h
+	src/rule/CharRule.h
+	src/rule/EndRule.h
+	src/rule/IfRule.h
+	src/rule/NotRule.h
+	src/rule/OneRule.h
+	src/rule/OptRule.h
+	src/rule/PlusRule.h
+	src/rule/RangeRule.h
+	src/rule/RepRule.h
+	src/rule/SeqRule.h
+	src/rule/StarRule.h
+	src/rule/UntilRule.h
+	src/Rule.h
+	src/StandardRules.h
+	src/Parser.h
+	src/StdLogTraceAction.h
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)
+target_include_directories(${PROJECT_NAME}
+	INTERFACE ${CMAKE_CURRENT_LIST_DIR}
+)
 
 add_executable("${PROJECT_NAME}Test"
 	test/ParsingStateMachineTest.cpp
 )
-target_include_directories("${PROJECT_NAME}Test"
-    PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src
-)
 set_target_properties("${PROJECT_NAME}Test" PROPERTIES CXX_STANDARD 20)
-target_link_libraries("${PROJECT_NAME}Test" PRIVATE Catch2::Catch2WithMain)
+target_link_libraries("${PROJECT_NAME}Test" PRIVATE Catch2::Catch2WithMain ${PROJECT_NAME})
 
 include(CTest)
 include(Catch)

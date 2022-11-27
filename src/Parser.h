@@ -1,156 +1,14 @@
 #pragma once
 
+#include "Rule.h"
 #include <array>
 #include <assert.h>
 #include <span>
-#include <stdint.h>
-#include <tuple>
 #include <type_traits>
 
 // Parsing state machine
 namespace psm
 {
-	class RuleInput
-	{
-		const char *current_, *begin_, *end_;
-
-	public:
-		inline RuleInput( const char* begin, const char* end ) noexcept
-		    : current_( begin ), begin_( begin ), end_( end ) {}
-		inline RuleInput( const char* begin, const char* end, const char* current ) noexcept
-		    : current_( current ), begin_( begin ), end_( end ) {}
-
-		inline const char* begin() const noexcept { return begin_; }
-		inline const char* current() const noexcept { return current_; }
-		inline const char* end() const noexcept { return end_; }
-		inline std::size_t size() const noexcept { return ( std::size_t )( end_ - current_ ); }
-		inline bool empty() const noexcept { return current_ == end_; }
-		inline std::size_t position() const noexcept { return ( std::size_t )( current_ - begin_ ); }
-		inline void setCurrent( const char* current ) noexcept
-		{
-			current_ = current;
-			if( current_ > end_ )
-				current_ = end_;
-		}
-		inline bool consume( std::size_t size ) noexcept
-		{
-			current_ += size;
-			if( current_ > end_ )
-			{
-				current_ = end_;
-				return false;
-			}
-			return true;
-		}
-		inline bool consume() noexcept
-		{
-			if( current_ != end_ )
-			{
-				++current_;
-				return true;
-			}
-			return false;
-		}
-		inline void discard() noexcept { current_ = begin_; }
-	};
-
-	class RuleInputRef
-	{
-		RuleInput& ref_;
-
-	public:
-		inline RuleInputRef( RuleInput& ref ) : ref_( ref ) {}
-
-		inline const char* begin() const noexcept { return ref_.begin(); }
-		inline const char* current() const noexcept { return ref_.current(); }
-		inline const char* end() const noexcept { return ref_.end(); }
-		inline std::size_t size() const noexcept { return ref_.size(); }
-		inline bool empty() const noexcept { return ref_.empty(); }
-		inline std::size_t position() const noexcept { return ref_.position(); }
-		inline void setCurrent( const char* current ) noexcept { ref_.setCurrent( current ); }
-		inline bool consume( std::size_t size ) noexcept { return ref_.consume( size ); }
-		inline bool consume() noexcept { return ref_.consume(); }
-		inline void discard() noexcept { ref_.discard(); }
-	};
-
-	enum class RuleMatchCode
-	{
-		True,
-		False,
-		TrueCanMore,
-		NotTrueYet,
-		CallNested
-	};
-
-	struct RuleResult
-	{
-		RuleMatchCode code;
-		std::size_t callIndex = 0;
-	};
-
-	class RuleBase;
-
-	struct NestedRuleResult
-	{
-		NestedRuleResult( RuleInput& input_ ) : input( input_ ) {}
-		RuleBase* rule;
-		std::size_t index;
-		RuleInput& input;
-		bool result;
-	};
-
-	class RuleBase
-	{
-	public:
-		using Rules = std::tuple<>;
-
-		virtual ~RuleBase() {}
-		virtual RuleResult match( RuleInputRef input, void* states )
-		{
-			return { RuleMatchCode::False };
-		}
-		virtual RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult )
-		{
-			return { RuleMatchCode::False };
-		}
-	};
-
-	template< std::size_t Index >
-	struct Tag
-	{
-	};
-
-	using Tag0 = Tag< 0 >;
-	using Tag1 = Tag< 1 >;
-	using Tag2 = Tag< 2 >;
-	using Tag3 = Tag< 3 >;
-	using Tag4 = Tag< 4 >;
-	using Tag5 = Tag< 5 >;
-	using Tag6 = Tag< 6 >;
-	using Tag7 = Tag< 7 >;
-	using Tag8 = Tag< 8 >;
-	using Tag9 = Tag< 9 >;
-
-	template< typename Tag_, std::size_t MaxCount_, typename Rule_ >
-	struct Gen
-	{
-		static_assert( MaxCount_ > 0, "" );
-		using Tag = Tag_;
-		using Rule = Rule_;
-		static constexpr std::size_t MaxCount = MaxCount_;
-	};
-
-	template< typename Tag_ >
-	struct Ref
-	{
-		using Tag = Tag_;
-	};
-
-	template< typename Rule >
-	class Quiet : public Rule
-	{
-	};
-
 	namespace detail
 	{
 		template< typename Type, Type V, Type... Vs >
@@ -499,11 +357,22 @@ namespace psm
 		template< typename Generators, typename Rules >
 		using gen_ref_substitution_t = typename gen_ref_substitution< Generators, Rules >::type;
 
+		template< typename Rule >
+		struct is_quiet_rule : std::false_type
+		{
+		};
+
+		template< typename Rule >
+		struct is_quiet_rule< Quiet< Rule > > : std::true_type
+		{
+		};
+
 		struct RuleConstructorBase
 		{
 			virtual RuleBase* construct( void* mem ) const noexcept = 0;
 			virtual std::size_t size() const noexcept = 0;
 			virtual bool isQuiet() const noexcept = 0;
+			virtual std::string_view name() const noexcept = 0;
 		};
 
 		template< typename Rule >
@@ -519,24 +388,11 @@ namespace psm
 			}
 			bool isQuiet() const noexcept override
 			{
-				return false;
+				return is_quiet_rule< Rule >::value;
 			}
-		};
-
-		template< typename Rule >
-		struct RuleConstructor< Quiet< Rule > > : RuleConstructorBase
-		{
-			RuleBase* construct( void* mem ) const noexcept override
+			std::string_view name() const noexcept override
 			{
-				return new( mem ) Quiet< Rule >;
-			}
-			std::size_t size() const noexcept override
-			{
-				return sizeof( Quiet< Rule > );
-			}
-			bool isQuiet() const noexcept override
-			{
-				return true;
+				return typeid( Rule ).name();
 			}
 		};
 
@@ -566,7 +422,13 @@ namespace psm
 			using Rules = std::tuple<>;
 		};
 
-		struct NaR // not a rule
+		template< typename Type, typename = void >
+		struct is_tracing_enabled : std::false_type
+		{
+		};
+
+		template< typename Type >
+		struct is_tracing_enabled< Type, std::enable_if_t< Type::PsmTracing == true > > : std::true_type
 		{
 		};
 	} // namespace detail
@@ -606,6 +468,7 @@ namespace psm
 		static constexpr std::size_t MaxDeep = RuleTypeInfo::max_deep - 1;
 		static constexpr bool UseActionFunction = std::tuple_size_v< typename ActionFunction::Rules > != 0;
 		static constexpr bool UseRulePosition = UseActionFunction && RulePositioning;
+		static constexpr bool Tracing = detail::is_tracing_enabled< ActionFunction >::value;
 
 		Parser();
 		Parser( ActionFunction func );
@@ -637,6 +500,7 @@ namespace psm
 		void initRuleInfos( std::index_sequence< Ids... > );
 
 		void callAction( Position* pos, RuleBase* rule, std::size_t beginPos, const char* begin, const char* end );
+		void trace( Position* pos, RuleInputRef input, RuleResult result );
 		RuleBase* pushRule( std::size_t index );
 		void popRule( std::size_t index );
 		RuleBase* topRule( std::size_t index );
@@ -736,6 +600,8 @@ namespace psm
 		while( true )
 		{
 			result = rule->match( input, states_ );
+			if constexpr( Tracing )
+				trace( currentPos_, input, result );
 			if( result.code == RuleMatchCode::TrueCanMore )
 			{
 				if( !complete )
@@ -821,6 +687,8 @@ namespace psm
 				popRule( currentPos_->ruleIndex );
 				rule = prevRule;
 				currentPos_ = prevPos;
+				if constexpr( Tracing )
+					trace( currentPos_, input, result );
 				if( result.code == RuleMatchCode::TrueCanMore )
 				{
 					if( complete )
@@ -937,6 +805,12 @@ namespace psm
 	}
 
 	template< typename Rule, typename ActionFunction, bool RulePositioning >
+	void Parser< Rule, ActionFunction, RulePositioning >::trace( Position* pos, RuleInputRef input, RuleResult result )
+	{
+		actionFunc_.trace( pos - &positions_.front(), input, result, ruleInfos_[pos->ruleIndex].constructor->name() );
+	}
+
+	template< typename Rule, typename ActionFunction, bool RulePositioning >
 	RuleBase* Parser< Rule, ActionFunction, RulePositioning >::pushRule( std::size_t index )
 	{
 		if constexpr( std::tuple_size_v< Generators > != 0 )
@@ -976,392 +850,4 @@ namespace psm
 	{
 		return stackTop_ == &ruleStackData_.front();
 	}
-
-	///////////////////////////////////////////////////////////////////////////////////////////////
-	///////////////////////////////////////////////////////////////////////////////////////////////
-	///////////////////////////////////////////////////////////////////////////////////////////////
-
-	template< char Begin, char End >
-	class Range : public RuleBase
-	{
-	public:
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			if( input.empty() )
-				return { RuleMatchCode::NotTrueYet };
-			if( *input.current() >= Begin && *input.current() <= End )
-			{
-				input.consume();
-				return { RuleMatchCode::True };
-			}
-			return { RuleMatchCode::False };
-		}
-	};
-
-	template< char Begin, char End >
-	class NotRange : public RuleBase
-	{
-	public:
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			if( input.empty() )
-				return { RuleMatchCode::NotTrueYet };
-			if( *input.current() < Begin || *input.current() > End )
-			{
-				input.consume();
-				return { RuleMatchCode::True };
-			}
-			return { RuleMatchCode::False };
-		}
-	};
-
-	template< typename Rule >
-	class Plus : public RuleBase
-	{
-		bool one_ = false;
-
-	public:
-		using Rules = std::tuple< Rule >;
-
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			return { RuleMatchCode::CallNested, 0 };
-		}
-		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
-		{
-			if( !nestedResult.result )
-			{
-				if( !one_ )
-					return { RuleMatchCode::False };
-				return { RuleMatchCode::True };
-			}
-			one_ = true;
-			input.setCurrent( nestedResult.input.current() );
-			return { RuleMatchCode::CallNested, 0 };
-		}
-	};
-
-	template< typename Rule >
-	class Star : public RuleBase
-	{
-	public:
-		using Rules = std::tuple< Rule >;
-
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			return { RuleMatchCode::CallNested, 0 };
-		}
-		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
-		{
-			if( !nestedResult.result )
-				return { RuleMatchCode::True };
-			input.setCurrent( nestedResult.input.current() );
-			return { RuleMatchCode::CallNested, 0 };
-		}
-	};
-
-	template< typename Rule >
-	class Opt : public RuleBase
-	{
-	public:
-		using Rules = std::tuple< Rule >;
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			return { RuleMatchCode::CallNested, 0 };
-		}
-		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
-		{
-			if( nestedResult.result )
-				input.setCurrent( nestedResult.input.current() );
-			return { RuleMatchCode::True };
-		}
-	};
-
-	template< typename Rule, typename... Others >
-	class One : public RuleBase
-	{
-	public:
-		using Rules = std::tuple< Rule, Others... >;
-		static constexpr std::size_t ChildrenCount = std::tuple_size_v< Rules >;
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			return { RuleMatchCode::CallNested, 0 };
-		}
-		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
-		{
-			if( nestedResult.result )
-			{
-				input.setCurrent( nestedResult.input.current() );
-				return { RuleMatchCode::True };
-			}
-			else if( nestedResult.index != ( ChildrenCount - 1 ) )
-				return { RuleMatchCode::CallNested, nestedResult.index + 1 };
-			return { RuleMatchCode::False };
-		}
-	};
-
-	template< typename Condition, typename Then, typename Else = detail::NaR >
-	class If : public RuleBase
-	{
-	public:
-		using Rules = std::conditional_t< std::is_same_v< Else, detail::NaR >, std::tuple< Condition, Then >, std::tuple< Condition, Then, Else > >;
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			return { RuleMatchCode::CallNested, 0 };
-		}
-		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
-		{
-			if( nestedResult.index == 0 )
-			{
-				if( nestedResult.result )
-				{
-					input.setCurrent( nestedResult.input.current() );
-					return { RuleMatchCode::CallNested, 1 };
-				}
-				else
-				{
-					if constexpr( std::is_same_v< Else, detail::NaR > )
-						return { RuleMatchCode::True };
-					return { RuleMatchCode::CallNested, 2 };
-				}
-			}
-			if( nestedResult.result )
-			{
-				input.setCurrent( nestedResult.input.current() );
-				return { RuleMatchCode::True };
-			}
-			else
-				return { RuleMatchCode::False };
-		}
-	};
-
-	template< typename Rule >
-	class Not : public RuleBase
-	{
-	public:
-		using Rules = std::tuple< Rule >;
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			return { RuleMatchCode::CallNested, 0 };
-		}
-		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
-		{
-			if( nestedResult.result )
-				return { RuleMatchCode::False };
-			else
-				return { RuleMatchCode::True };
-		}
-	};
-
-	template< typename Rule, typename... Others >
-	class Seq : public RuleBase
-	{
-	public:
-		using Rules = std::tuple< Rule, Others... >;
-		static constexpr std::size_t ChildrenCount = std::tuple_size_v< Rules >;
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			return { RuleMatchCode::CallNested, 0 };
-		}
-		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
-		{
-			if( nestedResult.result )
-			{
-				input.setCurrent( nestedResult.input.current() );
-				if( nestedResult.index == ( ChildrenCount - 1 ) )
-					return { RuleMatchCode::True };
-				return { RuleMatchCode::CallNested, nestedResult.index + 1 };
-			}
-			return { RuleMatchCode::False };
-		}
-	};
-
-	template< char C >
-	class Char : public RuleBase
-	{
-	public:
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			if( input.empty() )
-				return { RuleMatchCode::NotTrueYet };
-			if( *input.current() == C )
-			{
-				input.consume();
-				return { RuleMatchCode::True };
-			}
-			return { RuleMatchCode::False };
-		}
-	};
-
-	template< char C >
-	class NotChar : public RuleBase
-	{
-	public:
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			if( input.empty() )
-				return { RuleMatchCode::NotTrueYet };
-			if( *input.current() != C )
-			{
-				input.consume();
-				return { RuleMatchCode::True };
-			}
-			return { RuleMatchCode::False };
-		}
-	};
-
-	template< char C, char... Cs >
-	class Str : public RuleBase
-	{
-	public:
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			static std::array< const char, sizeof...( Cs ) + 1 > str{ C, Cs... };
-			if( str.size() - input.position() > input.size() )
-				return { RuleMatchCode::NotTrueYet };
-			for( auto c : str )
-			{
-				if( c != *input.current() )
-					return { RuleMatchCode::False };
-				input.consume();
-			}
-			return { RuleMatchCode::True };
-		}
-	};
-
-	class Any : public RuleBase
-	{
-	public:
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			if( input.consume() )
-				return { RuleMatchCode::True };
-			return { RuleMatchCode::NotTrueYet };
-		}
-	};
-
-	template< std::size_t N >
-	class AnyN : public RuleBase
-	{
-		static_assert( N != 0, "wrong parameter" );
-
-	public:
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			if( input.consume( N - input.position() ) )
-				return { RuleMatchCode::True };
-			return { RuleMatchCode::NotTrueYet };
-		}
-	};
-
-	template< std::size_t Min, std::size_t Max, typename Rule >
-	class RepMinMax : public RuleBase
-	{
-		static_assert( Min <= Max && Max != 0, "wrong parameters" );
-		std::size_t n_ = 0;
-
-	public:
-		using Rules = std::tuple< Rule >;
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			return { RuleMatchCode::CallNested, 0 };
-		}
-		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
-		{
-			if( nestedResult.result )
-			{
-				input.setCurrent( nestedResult.input.current() );
-				if( ++n_ == Max )
-					return { RuleMatchCode::True };
-				return { RuleMatchCode::CallNested, 0 };
-			}
-			if( n_ >= Min )
-				return { RuleMatchCode::True };
-			return { RuleMatchCode::False };
-		}
-	};
-
-	template< std::size_t Min, std::size_t Max >
-	class RepMinMax< Min, Max, Any > : public RuleBase
-	{
-		static_assert( Min <= Max && Max != 0, "wrong parameters" );
-		std::size_t n_ = 0;
-
-	public:
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			if( input.consume( Max - input.position() ) )
-				return { RuleMatchCode::True };
-			if( input.position() >= Min )
-				return { RuleMatchCode::True };
-			return { RuleMatchCode::NotTrueYet };
-		}
-	};
-
-	template< std::size_t Min, typename Rule >
-	class RepMin : public RepMinMax< Min, ( std::size_t )-1, Rule >
-	{
-	};
-
-	template< std::size_t Max, typename Rule >
-	class RepMax : public RepMinMax< 0, Max, Rule >
-	{
-	};
-
-	template< typename Rule >
-	class Rep : public RepMinMax< 0, ( std::size_t )-1, Rule >
-	{
-	};
-
-	template< typename Rule, std::size_t Max >
-	class UntilMax : public RuleBase
-	{
-	public:
-		using Rules = std::tuple< Rule >;
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			return { RuleMatchCode::CallNested, 0 };
-		}
-		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
-		{
-			if( nestedResult.result )
-				return { RuleMatchCode::True };
-			if( input.position() < Max )
-			{
-				if( input.consume() )
-					return { RuleMatchCode::CallNested, 0 };
-				return { RuleMatchCode::NotTrueYet };
-			}
-			return { RuleMatchCode::False };
-		}
-	};
-
-	template< typename Rule >
-	class Until : public UntilMax< Rule, ( std::size_t )-1 >
-	{
-	};
-
-	class End : public RuleBase
-	{
-	public:
-		using Rules = std::tuple<>;
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			if( input.empty() )
-				return { RuleMatchCode::True };
-			return { RuleMatchCode::False };
-		}
-	};
-
-	class Digit : public Range< '0', '9' >
-	{
-	};
-
-	class PositiveInteger : public Plus< Digit >
-	{
-	};
-
-	class Integer : public Seq< Opt< One< Char< '+' >, Char< '-' > > >, Plus< Digit > >
-	{
-	};
 } // namespace psm
