@@ -128,9 +128,18 @@ namespace psm
 	using Tag9 = Tag< 9 >;
 
 	template< typename Tag_, std::size_t MaxCount_, typename Rule_ >
-	struct Gen
+	struct GenA
 	{
-		static_assert( MaxCount_ > 0, "" );
+		static_assert( MaxCount_ > 0, "MaxCount must be greater than 0" );
+		using Tag = Tag_;
+		using Rule = Rule_;
+		static constexpr std::size_t MaxCount = MaxCount_;
+	};
+
+	template< typename Tag_, std::size_t MaxCount_, typename Rule_ >
+	struct GenM
+	{
+		static_assert( MaxCount_ > 0, "MaxCount must be greater than 0" );
 		using Tag = Tag_;
 		using Rule = Rule_;
 		static constexpr std::size_t MaxCount = MaxCount_;

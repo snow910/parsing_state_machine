@@ -231,8 +231,10 @@ namespace psm
 		template< typename... RuleInfos >
 		struct unite_rules_info
 		{
-			static constexpr std::size_t max_deep = max_v< std::size_t, RuleInfos::max_deep... >;
-			static constexpr std::size_t stack_size = max_v< std::size_t, RuleInfos::stack_size... >;
+			static constexpr std::size_t max_deep_mpl = max_v< std::size_t, RuleInfos::max_deep_mpl... >;
+			static constexpr std::size_t max_deep_adt = max_v< std::size_t, RuleInfos::max_deep_adt... >;
+			static constexpr std::size_t stack_size_mpl = max_v< std::size_t, RuleInfos::stack_size_mpl... >;
+			static constexpr std::size_t stack_size_adt = max_v< std::size_t, RuleInfos::stack_size_adt... >;
 			using unique_rules = unique_tuple_cat_t< typename RuleInfos::unique_rules... >;
 			using generators = tuple_cat_t< typename RuleInfos::generators... >;
 		};
@@ -240,48 +242,76 @@ namespace psm
 		template<>
 		struct unite_rules_info<>
 		{
-			static constexpr std::size_t max_deep = 0;
-			static constexpr std::size_t stack_size = 0;
+			static constexpr std::size_t max_deep_mpl = 0;
+			static constexpr std::size_t max_deep_adt = 0;
+			static constexpr std::size_t stack_size_mpl = 0;
+			static constexpr std::size_t stack_size_adt = 0;
 			using unique_rules = std::tuple<>;
 			using generators = std::tuple<>;
 		};
 
 		template< typename Rule >
-		struct rule_info;
+		struct _rule_info;
 
 		template< typename Rules >
 		struct _rules_info;
 
 		template< typename... Rules >
-		struct _rules_info< std::tuple< Rules... > > : unite_rules_info< rule_info< Rules >... >
+		struct _rules_info< std::tuple< Rules... > > : unite_rules_info< _rule_info< Rules >... >
 		{
 		};
 
 		template< typename Rule >
-		struct rule_info
+		struct _rule_info
 		{
-			static constexpr std::size_t max_deep = _rules_info< typename Rule::Rules >::max_deep + 1;
-			static constexpr std::size_t stack_size = _rules_info< typename Rule::Rules >::stack_size + sizeof( Rule );
+			static constexpr std::size_t max_deep_mpl = _rules_info< typename Rule::Rules >::max_deep_mpl + 1;
+			static constexpr std::size_t max_deep_adt = _rules_info< typename Rule::Rules >::max_deep_adt;
+			static constexpr std::size_t stack_size_mpl = _rules_info< typename Rule::Rules >::stack_size_mpl + sizeof( Rule );
+			static constexpr std::size_t stack_size_adt = _rules_info< typename Rule::Rules >::stack_size_adt;
 			using unique_rules = unique_tuple_cat_t< typename _rules_info< typename Rule::Rules >::unique_rules, std::tuple< Rule > >;
 			using generators = typename _rules_info< typename Rule::Rules >::generators;
 		};
 
 		template< typename Tag, std::size_t MaxCount, typename Rule >
-		struct rule_info< Gen< Tag, MaxCount, Rule > >
+		struct _rule_info< GenA< Tag, MaxCount, Rule > >
 		{
-			static constexpr std::size_t max_deep = rule_info< Rule >::max_deep * MaxCount;
-			static constexpr std::size_t stack_size = rule_info< Rule >::stack_size * MaxCount;
-			using unique_rules = rule_info< Rule >::unique_rules;
-			using generators = push_type_back_t< typename rule_info< Rule >::generators, Gen< Tag, MaxCount, Rule > >;
+			static constexpr std::size_t max_deep_mpl = 0;
+			static constexpr std::size_t max_deep_adt = _rule_info< Rule >::max_deep_adt + _rule_info< Rule >::max_deep_mpl * MaxCount;
+			static constexpr std::size_t stack_size_mpl = 0;
+			static constexpr std::size_t stack_size_adt = _rule_info< Rule >::stack_size_adt + _rule_info< Rule >::stack_size_mpl * MaxCount;
+			using unique_rules = _rule_info< Rule >::unique_rules;
+			using generators = push_type_back_t< typename _rule_info< Rule >::generators, GenA< Tag, MaxCount, Rule > >;
+		};
+
+		template< typename Tag, std::size_t MaxCount, typename Rule >
+		struct _rule_info< GenM< Tag, MaxCount, Rule > >
+		{
+			static constexpr std::size_t max_deep_mpl = _rule_info< Rule >::max_deep_mpl * MaxCount;
+			static constexpr std::size_t max_deep_adt = _rule_info< Rule >::max_deep_adt;
+			static constexpr std::size_t stack_size_mpl = _rule_info< Rule >::stack_size_mpl * MaxCount;
+			static constexpr std::size_t stack_size_adt = _rule_info< Rule >::stack_size_adt;
+			using unique_rules = _rule_info< Rule >::unique_rules;
+			using generators = push_type_back_t< typename _rule_info< Rule >::generators, GenM< Tag, MaxCount, Rule > >;
 		};
 
 		template< typename Tag >
-		struct rule_info< Ref< Tag > >
+		struct _rule_info< Ref< Tag > >
 		{
-			static constexpr std::size_t max_deep = 0;
-			static constexpr std::size_t stack_size = 0;
+			static constexpr std::size_t max_deep_mpl = 0;
+			static constexpr std::size_t max_deep_adt = 0;
+			static constexpr std::size_t stack_size_mpl = 0;
+			static constexpr std::size_t stack_size_adt = 0;
 			using unique_rules = std::tuple<>;
 			using generators = std::tuple<>;
+		};
+
+		template< typename Rule >
+		struct rule_info
+		{
+			static constexpr std::size_t max_deep = _rule_info< Rule >::max_deep_mpl + _rule_info< Rule >::max_deep_adt;
+			static constexpr std::size_t stack_size = _rule_info< Rule >::stack_size_mpl + _rule_info< Rule >::stack_size_adt;
+			using unique_rules = typename _rule_info< Rule >::unique_rules;
+			using generators = typename _rule_info< Rule >::generators;
 		};
 
 		template< typename Rules >
@@ -326,7 +356,13 @@ namespace psm
 		};
 
 		template< typename Generators, typename Tag, std::size_t MaxCount, typename Rule >
-		struct _gen_ref_substitution< Generators, Gen< Tag, MaxCount, Rule > >
+		struct _gen_ref_substitution< Generators, GenA< Tag, MaxCount, Rule > >
+		{
+			using type = typename _gen_ref_substitution< Generators, Rule >::type;
+		};
+
+		template< typename Generators, typename Tag, std::size_t MaxCount, typename Rule >
+		struct _gen_ref_substitution< Generators, GenM< Tag, MaxCount, Rule > >
 		{
 			using type = typename _gen_ref_substitution< Generators, Rule >::type;
 		};
