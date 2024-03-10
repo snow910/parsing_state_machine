@@ -6,7 +6,7 @@ Include(FetchContent)
 FetchContent_Declare(
 	Catch2
 	GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-	GIT_TAG        v3.0.1 # or a later release
+	GIT_TAG v3.0.1 # or a later release
 )
 FetchContent_MakeAvailable(Catch2)
 
@@ -24,11 +24,11 @@ add_library(${PROJECT_NAME} STATIC
 	src/rule/SeqRule.h
 	src/rule/StarRule.h
 	src/rule/UntilRule.h
-	src/Rule.h
-	src/StandardRules.h
+	src/LogTraceAction.h
 	src/Parser.h
 	src/Parser.cpp
-	src/StdLogTraceAction.h
+	src/Rule.h
+	src/StandardRules.h
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)
 target_include_directories(${PROJECT_NAME}
@@ -36,6 +36,7 @@ target_include_directories(${PROJECT_NAME}
 )
 
 add_executable("${PROJECT_NAME}Test"
+	test/JsonTest.cpp
 	test/ParsingStateMachineTest.cpp
 )
 set_target_properties("${PROJECT_NAME}Test" PROPERTIES CXX_STANDARD 20)
