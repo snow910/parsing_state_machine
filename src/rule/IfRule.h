@@ -30,7 +30,7 @@ namespace psm
 				{
 					if constexpr( std::is_same_v< Else, NaR > )
 						return { RuleMatchCode::True };
-					return { RuleMatchCode::CallNested, 2 };
+					return { RuleMatchCode::CallNested, std::is_same_v< Then, NaR > ? 1 : 2 };
 				}
 			}
 			if( nestedResult.result )

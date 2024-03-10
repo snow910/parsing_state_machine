@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Rule.h"
+#include <cstring>
 
 namespace psm
 {
@@ -44,16 +45,15 @@ namespace psm
 	public:
 		RuleResult match( RuleInputRef input, void* states ) override
 		{
-			static std::array< const char, sizeof...( Cs ) + 1 > str{ C, Cs... };
+			static constexpr std::array< const char, sizeof...( Cs ) + 1 > str{ C, Cs... };
 			if( str.size() - input.position() > input.size() )
 				return { RuleMatchCode::NotTrueYet };
-			for( auto c : str )
+			if( strncmp( str.data(), input.current(), str.size() ) == 0 )
 			{
-				if( c != *input.current() )
-					return { RuleMatchCode::False };
-				input.consume();
+				input.consume( str.size() );
+				return { RuleMatchCode::True };
 			}
-			return { RuleMatchCode::True };
+			return { RuleMatchCode::False };
 		}
 	};
 } // namespace psm

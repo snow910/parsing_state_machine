@@ -36,6 +36,18 @@ target_include_directories(${PROJECT_NAME}
 )
 
 add_executable("${PROJECT_NAME}Test"
+	test/rule/AnyRuleTest.cpp
+	test/rule/CharRuleTest.cpp
+	test/rule/DiscardRuleTest.cpp
+	test/rule/EndRuleTest.cpp
+	test/rule/IfRuleTest.cpp
+	test/rule/NotRuleTest.cpp
+	test/rule/OneRuleTest.cpp
+	test/rule/OptRuleTest.cpp
+	test/rule/PlusRuleTest.cpp
+	test/rule/RangeRuleTest.cpp
+	test/rule/RepRuleTest.cpp
+	test/GeneratorTest.cpp
 	test/JsonTest.cpp
 	test/ParsingStateMachineTest.cpp
 )

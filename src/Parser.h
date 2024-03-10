@@ -471,6 +471,7 @@ namespace psm
 			Incomplete
 		} type;
 		std::string_view string;
+		auto operator<=>( const ParsingResult& other ) const noexcept = default;
 	};
 
 	class ParserBase
@@ -483,7 +484,7 @@ namespace psm
 		ParsingResult parse( const char* begin, const char* end, bool complete = true );
 		inline ParsingResult parse( std::string_view string, bool complete = true ) { return parse( string.data(), string.data() + string.size() ); }
 		template< std::size_t N >
-		inline ParsingResult parse( const char ( &string )[N] ) { return parse( string, string + N - 1 ); }
+		inline ParsingResult parse( const char ( &string )[N], bool complete = true ) { return parse( string, string + N - 1, complete ); }
 
 		void reset();
 

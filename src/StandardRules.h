@@ -2,6 +2,7 @@
 
 #include "rule/AnyRule.h"
 #include "rule/CharRule.h"
+#include "rule/DiscardRule.h"
 #include "rule/EndRule.h"
 #include "rule/IfRule.h"
 #include "rule/NotRule.h"
