@@ -10,7 +10,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Catch2)
 
-add_library(${PROJECT_NAME} INTERFACE
+add_library(${PROJECT_NAME} STATIC
 	src/rule/AnyRule.h
 	src/rule/CharRule.h
 	src/rule/EndRule.h
@@ -27,11 +27,12 @@ add_library(${PROJECT_NAME} INTERFACE
 	src/Rule.h
 	src/StandardRules.h
 	src/Parser.h
+	src/Parser.cpp
 	src/StdLogTraceAction.h
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)
 target_include_directories(${PROJECT_NAME}
-	INTERFACE ${CMAKE_CURRENT_LIST_DIR}
+	PUBLIC ${CMAKE_CURRENT_LIST_DIR}
 )
 
 add_executable("${PROJECT_NAME}Test"
