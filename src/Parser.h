@@ -3,6 +3,7 @@
 #include "Rule.h"
 #include <array>
 #include <span>
+#include <typeinfo>
 #include <type_traits>
 
 // Parsing state machine
