@@ -384,10 +384,10 @@ namespace psm
 			using type = std::tuple< typename _gen_ref_substitution< Generators, Rules >::type... >;
 		};
 
-		template< typename Rules >
-		struct gen_ref_substitution< std::tuple<>, Rules >
+		template< typename... Rules >
+		struct gen_ref_substitution< std::tuple<>, std::tuple< Rules... > >
 		{
-			using type = Rules;
+			using type = std::tuple< Rules... >;
 		};
 
 		template< typename Generators, typename Rules >
