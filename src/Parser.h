@@ -224,7 +224,7 @@ namespace psm
 		};
 
 		template< typename... Tuples >
-		using tuple_cat_t = tuple_cat< Tuples... >::type;
+		using tuple_cat_t = typename tuple_cat< Tuples... >::type;
 
 		//===========================================================================================================================================
 
