@@ -629,7 +629,7 @@ namespace psm
 		else
 			ruleInfos_[Id].nestedRuleIndexes = nullptr;
 		if constexpr( detail::tuple_element_index_v< CRule, typename ActionFunction::Rules > != ( std::size_t )-1 )
-			ruleInfos_[Id].func = &detail::ruleActionFunction< CRule, ActionFunction >;
+			ruleInfos_[Id].func = reinterpret_cast< void* >( &detail::ruleActionFunction< CRule, ActionFunction > );
 		else
 			ruleInfos_[Id].func = nullptr;
 	}
