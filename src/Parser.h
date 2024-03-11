@@ -279,7 +279,7 @@ namespace psm
 			static constexpr std::size_t max_deep_adt = _rule_info< Rule >::max_deep_adt + _rule_info< Rule >::max_deep_mpl * MaxCount;
 			static constexpr std::size_t stack_size_mpl = 0;
 			static constexpr std::size_t stack_size_adt = _rule_info< Rule >::stack_size_adt + _rule_info< Rule >::stack_size_mpl * MaxCount;
-			using unique_rules = _rule_info< Rule >::unique_rules;
+			using unique_rules = typename _rule_info< Rule >::unique_rules;
 			using generators = push_type_back_t< typename _rule_info< Rule >::generators, GenA< Tag, MaxCount, Rule > >;
 		};
 
@@ -290,7 +290,7 @@ namespace psm
 			static constexpr std::size_t max_deep_adt = _rule_info< Rule >::max_deep_adt;
 			static constexpr std::size_t stack_size_mpl = _rule_info< Rule >::stack_size_mpl * MaxCount;
 			static constexpr std::size_t stack_size_adt = _rule_info< Rule >::stack_size_adt;
-			using unique_rules = _rule_info< Rule >::unique_rules;
+			using unique_rules = typename _rule_info< Rule >::unique_rules;
 			using generators = push_type_back_t< typename _rule_info< Rule >::generators, GenM< Tag, MaxCount, Rule > >;
 		};
 
