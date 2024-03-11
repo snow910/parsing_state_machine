@@ -27,6 +27,7 @@ jobs:
           - os: ubuntu-latest
             c_compiler: clang
             cpp_compiler: clang++
+            cpp_flags: -stdlib=libc++
         exclude:
           - os: windows-latest
             c_compiler: gcc
@@ -50,6 +51,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -DCMAKE_CXX_FLAGS=${{ matrix.cpp_flags }}
         -S ${{ github.workspace }}
 
     - name: Build
