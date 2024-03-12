@@ -2,6 +2,7 @@
 
 #include "Rule.h"
 #include <array>
+#include <compare>
 #include <span>
 #include <typeinfo>
 #include <type_traits>
@@ -472,7 +473,7 @@ namespace psm
 			Incomplete
 		} type;
 		std::string_view string;
-		auto operator<=>( const ParsingResult& other ) const noexcept = default;
+		std::strong_ordering operator<=>( const ParsingResult& other ) const noexcept = default;
 	};
 
 	class ParserBase
