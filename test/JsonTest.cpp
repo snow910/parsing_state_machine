@@ -40,7 +40,7 @@ namespace json_test
 	using ObjectPtr = std::unique_ptr< Object >;
 	using ArrayPtr = std::unique_ptr< Array >;
 
-	using Value = std::variant< double, bool, std::string, ObjectPtr, ArrayPtr >;
+	using Value = std::variant< long long, bool, std::string, ObjectPtr, ArrayPtr >;
 
 	struct Object : std::map< std::string, Value >
 	{
@@ -103,7 +103,7 @@ namespace json_test
 				pValue = &( std::get< Object* >( stack.back() )->insert( std::pair< const std::string, Value >{ sv.substr( 1, sv.size() - 2 ), Value{} } ).first->second );
 			if constexpr( std::is_same_v< Rule, peg::IntegerValue > )
 			{
-				double v = 0;
+				long long v = 0;
 				std::from_chars( sv.data(), sv.data() + sv.size(), v );
 				addValue( v );
 			}
@@ -150,7 +150,7 @@ TEST_CASE( "JSON test (root is object)", "[json][psm]" )
 	CHECK( std::get< std::string >( obj.at( "name" ) ) == "John" );
 	CHECK( std::get< bool >( obj.at( "is_alive" ) ) == true );
 	CHECK( std::get< bool >( obj.at( "has_car" ) ) == false );
-	CHECK( std::get< double >( obj.at( "age" ) ) == 27.0 );
+	CHECK( std::get< long long >( obj.at( "age" ) ) == 27ll );
 
 	CHECK( obj.at( "address" ).index() == 3 );
 	auto addressObj = std::get< ObjectPtr >( obj.at( "address" ) ).get();
@@ -177,7 +177,7 @@ TEST_CASE( "JSON test (root is array)", "[json][psm]" )
 
 	Array& arr = *std::get< ArrayPtr >( root ).get();
 	CHECK( std::get< std::string >( arr.at( 0 ) ) == "hello" );
-	CHECK( std::get< double >( arr.at( 1 ) ) == 42.0 );
+	CHECK( std::get< long long >( arr.at( 1 ) ) == 42ll );
 	REQUIRE( arr.at( 2 ).index() == 3 );
 
 	Object& obj = *std::get< ObjectPtr >( arr.at( 2 ) ).get();
