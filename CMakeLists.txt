@@ -47,6 +47,9 @@ add_executable("${PROJECT_NAME}Test"
 	test/rule/PlusRuleTest.cpp
 	test/rule/RangeRuleTest.cpp
 	test/rule/RepRuleTest.cpp
+	test/rule/SeqRuleTest.cpp
+	test/rule/StarRuleTest.cpp
+	test/rule/UntilRuleTest.cpp
 	test/GeneratorTest.cpp
 	test/JsonTest.cpp
 	test/ParsingStateMachineTest.cpp
