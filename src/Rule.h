@@ -75,7 +75,8 @@ namespace psm
 		False,
 		TrueCanMore,
 		NotTrueYet,
-		CallNested
+		CallNested,
+		CallNestedOnMatch
 	};
 
 	struct RuleResult
@@ -88,10 +89,10 @@ namespace psm
 
 	struct NestedRuleResult
 	{
-		NestedRuleResult( RuleInput& input_ ) : input( input_ ) {}
+		NestedRuleResult( const RuleInput& input_ ) : input( input_ ) {}
 		RuleBase* rule;
 		std::size_t index;
-		RuleInput& input;
+		const RuleInput& input;
 		bool result;
 	};
 

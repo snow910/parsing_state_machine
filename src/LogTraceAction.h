@@ -8,7 +8,7 @@ namespace psm
 {
 	struct LogTraceAction
 	{
-		using Rules = std::tuple<>;
+		using Rules = std::tuple< NaR >;
 		static constexpr bool PsmTracing = true;
 
 		inline void enableCompactName( bool enabled ) noexcept { compactName_ = enabled; }
@@ -61,6 +61,8 @@ namespace psm
 				return "True";
 			case RuleMatchCode::CallNested:
 				return "CallNested";
+			case RuleMatchCode::CallNestedOnMatch:
+				return "CallNested+";
 			case RuleMatchCode::False:
 				return "False";
 			case RuleMatchCode::TrueCanMore:

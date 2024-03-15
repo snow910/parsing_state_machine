@@ -13,6 +13,7 @@ FetchContent_MakeAvailable(Catch2)
 add_library(${PROJECT_NAME} STATIC
 	src/rule/AnyRule.h
 	src/rule/CharRule.h
+	src/rule/DiscardRule.h
 	src/rule/EndRule.h
 	src/rule/IfRule.h
 	src/rule/NotRule.h
@@ -20,9 +21,11 @@ add_library(${PROJECT_NAME} STATIC
 	src/rule/OptRule.h
 	src/rule/PlusRule.h
 	src/rule/RangeRule.h
+	src/rule/ReparseRule.h
 	src/rule/RepRule.h
 	src/rule/SeqRule.h
 	src/rule/StarRule.h
+	src/rule/SuccessRule.h
 	src/rule/UntilRule.h
 	src/LogTraceAction.h
 	src/Parser.h
@@ -46,6 +49,7 @@ add_executable("${PROJECT_NAME}Test"
 	test/rule/OptRuleTest.cpp
 	test/rule/PlusRuleTest.cpp
 	test/rule/RangeRuleTest.cpp
+	test/rule/ReparseRuleTest.cpp
 	test/rule/RepRuleTest.cpp
 	test/rule/SeqRuleTest.cpp
 	test/rule/StarRuleTest.cpp

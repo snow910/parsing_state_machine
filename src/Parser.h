@@ -460,7 +460,7 @@ namespace psm
 		};
 
 		template< typename Type >
-		struct action_rules< Type, std::enable_if_t< std::tuple_size_v< typename Type::Rules > != 0 > >
+		struct action_rules< Type, std::void_t< typename Type::Rules > >
 		{
 			using rules = typename Type::Rules;
 		};
@@ -496,14 +496,15 @@ namespace psm
 		inline void setStates( void* states ) noexcept { states_ = states; }
 
 		ParsingResult parse( const char* begin, const char* end, bool complete = true );
-		inline ParsingResult parse( std::string_view string, bool complete = true ) { return parse( string.data(), string.data() + string.size() ); }
+		inline ParsingResult parse( std::string_view string, bool complete = true ) { return parse( string.data(), string.data() + string.size(), complete ); }
 		template< std::size_t N >
 		inline ParsingResult parse( const char ( &string )[N], bool complete = true ) { return parse( string, string + N - 1, complete ); }
 
 		void reset();
 
 	protected:
-		virtual size_t indexForNestedRule( size_t ruleIndex, size_t nestedIndex ) = 0;
+		struct Position;
+		virtual std::size_t indexForNestedRule( std::size_t ruleIndex, std::size_t nestedIndex ) = 0;
 		virtual void callAction( RuleBase* rule, std::size_t pos, const std::string_view& string ) = 0;
 		virtual void trace( const RuleInput& input, const RuleResult& result ) = 0;
 		RuleBase* pushRule( std::size_t index );
@@ -511,12 +512,15 @@ namespace psm
 		RuleBase* topRule( std::size_t index );
 		RuleBase* previousRule( std::size_t topIntex, std::size_t prevIndex );
 		inline bool isRuleStackEmpty() const noexcept;
+		std::size_t inputBegin( Position* pos ) noexcept;
+		std::size_t inputEnd( Position* pos, Position* matchPos, size_t extSize ) noexcept;
 
 	protected:
 		struct Position
 		{
-			std::size_t ruleIndex;
-			std::size_t nestedIndex = 0;
+			uint16_t ruleIndex;
+			uint16_t nestedIndex : 15;
+			uint16_t callOnMatch : 1;
 			std::size_t pos;
 		};
 		struct RuleInfo
@@ -577,7 +581,7 @@ namespace psm
 
 		void initBase();
 
-		size_t indexForNestedRule( size_t ruleIndex, size_t nestedIndex ) override;
+		std::size_t indexForNestedRule( std::size_t ruleIndex, std::size_t nestedIndex ) override;
 		void callAction( RuleBase* rule, std::size_t pos, const std::string_view& string ) override;
 		void trace( const RuleInput& input, const RuleResult& result ) override;
 
@@ -666,14 +670,14 @@ namespace psm
 		ruleStackEnd_ = &ruleStackData_.back() + 1;
 		currentPos_ = &positions_.front();
 		currentPos_->pos = 0;
-		currentPos_->ruleIndex = std::tuple_size_v< UniqueRules > - 1;
+		currentPos_->ruleIndex = ( uint16_t )( std::tuple_size_v< UniqueRules > - 1 );
 		stackTop_ = &ruleStackData_.front();
 	}
 
 	template< typename Rule, typename ActionFunction >
-	size_t Parser< Rule, ActionFunction >::indexForNestedRule( size_t ruleIndex, size_t nestedIndex )
+	std::size_t Parser< Rule, ActionFunction >::indexForNestedRule( std::size_t ruleIndex, std::size_t nestedIndex )
 	{
-		return static_cast< size_t >( static_cast< IndexType* >( ruleInfos_[ruleIndex].nestedRuleIndexes )[nestedIndex] );
+		return static_cast< std::size_t >( static_cast< IndexType* >( ruleInfos_[ruleIndex].nestedRuleIndexes )[nestedIndex] );
 	}
 
 	template< typename Rule, typename ActionFunction >

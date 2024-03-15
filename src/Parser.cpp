@@ -25,6 +25,9 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 		rule = topRule( currentPos_->ruleIndex );
 	RuleInput input( begin + ( currentPos_ == pPositions_ ? 0 : ( currentPos_ - 1 )->pos ), end, begin + currentPos_->pos );
 	RuleResult result;
+	std::size_t extSize = end - begin;
+	bool extComplete = complete;
+	Position* matchPos = nullptr;
 	while( true )
 	{
 		result = rule->match( input, states_ );
@@ -49,21 +52,33 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 		}
 
 	ProcessResult:
-		if( result.code == RuleMatchCode::CallNested )
+		if( result.code == RuleMatchCode::CallNested || result.code == RuleMatchCode::CallNestedOnMatch )
 		{
 			if( currentPos_ + 1 == pPositionsEnd_ )
 			{
 				reset();
 				return { ParsingResult::Type::False, { begin, 0 } };
 			}
-			currentPos_->nestedIndex = result.callIndex;
+			currentPos_->nestedIndex = ( uint16_t )result.callIndex;
 			currentPos_->pos = input.current() - begin;
+			if( result.code == RuleMatchCode::CallNested )
+			{
+				currentPos_->callOnMatch = false;
+				input = RuleInput( input.current(), input.end() );
+			}
+			else
+			{
+				currentPos_->callOnMatch = true;
+				input = RuleInput( input.begin(), input.current() );
+				if( !matchPos )
+				{
+					matchPos = currentPos_;
+					complete = true;
+				}
+			}
 			std::size_t ruleIndex = currentPos_->ruleIndex;
-			++currentPos_;
-			currentPos_->ruleIndex = indexForNestedRule( ruleIndex, result.callIndex );
-			currentPos_->pos = input.current() - begin;
+			( ++currentPos_ )->ruleIndex = ( uint16_t )indexForNestedRule( ruleIndex, result.callIndex );
 			rule = pushRule( currentPos_->ruleIndex );
-			input = RuleInput( input.current(), input.end() );
 			if( rule == nullptr )
 			{
 				--currentPos_;
@@ -88,10 +103,7 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 				return { ParsingResult::Type::False, { begin, 0 } };
 			}
 			if( result.code == RuleMatchCode::True )
-			{
-				std::size_t beginPos = ( currentPos_ - 1 )->pos;
-				callAction( rule, beginPos, std::string_view( begin + beginPos, input.position() ) );
-			}
+				callAction( rule, input.begin() - begin, std::string_view( input.begin(), input.position() ) );
 			RuleInput nestedInput = input;
 			NestedRuleResult nestedResult( nestedInput );
 			nestedResult.rule = rule;
@@ -99,12 +111,17 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 			auto prevRule = previousRule( currentPos_->ruleIndex, prevPos->ruleIndex );
 			nestedResult.index = prevPos->nestedIndex;
 			nestedResult.result = result.code == RuleMatchCode::True;
-			input = RuleInput( begin + ( prevPos == pPositions_ ? 0 : ( prevPos - 1 )->pos ), end, begin + prevPos->pos );
+			input = RuleInput( begin + inputBegin( prevPos ), begin + inputEnd( prevPos, matchPos, extSize ), begin + prevPos->pos );
 			result = prevRule->nestedResult( input, states_, nestedResult );
 			popRule( currentPos_->ruleIndex );
 			rule = prevRule;
 			currentPos_ = prevPos;
 			trace( input, result );
+			if( matchPos == currentPos_ )
+			{
+				complete = extComplete;
+				matchPos = nullptr;
+			}
 			if( result.code == RuleMatchCode::TrueCanMore )
 			{
 				if( complete )
@@ -112,7 +129,7 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 					result.code = RuleMatchCode::True;
 					goto ProcessResult;
 				}
-				currentPos_->pos = input.position();
+				currentPos_->pos = input.current() - begin;
 				return { ParsingResult::Type::Incomplete, { begin, 0 } };
 			}
 			else if( result.code == RuleMatchCode::NotTrueYet )
@@ -122,7 +139,7 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 					result.code = RuleMatchCode::False;
 					goto ProcessResult;
 				}
-				currentPos_->pos = input.position();
+				currentPos_->pos = input.current() - begin;
 				return { ParsingResult::Type::Incomplete, { begin, 0 } };
 			}
 			goto ProcessResult;
@@ -170,4 +187,30 @@ RuleBase* ParserBase::previousRule( std::size_t topIntex, std::size_t prevIndex 
 bool ParserBase::isRuleStackEmpty() const noexcept
 {
 	return stackTop_ == ruleStackBegin_;
+}
+
+std::size_t ParserBase::inputBegin( Position* pos ) noexcept
+{
+	if( pos == pPositions_ )
+		return 0;
+	for( --pos;; --pos )
+	{
+		if( !pos->callOnMatch )
+			return pos->pos;
+		if( pos == pPositions_ )
+			return 0;
+	}
+}
+
+std::size_t ParserBase::inputEnd( Position* pos, Position* matchPos, std::size_t extSize ) noexcept
+{
+	if( !matchPos || pos == matchPos )
+		return extSize;
+	for( --pos;; --pos )
+	{
+		if( pos->callOnMatch )
+			return pos->pos;
+		if( pos == matchPos )
+			return extSize;
+	}
 }

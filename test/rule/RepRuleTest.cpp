@@ -13,4 +13,9 @@ TEST_CASE( "RepRule test", "[RepRule][psm]" )
 	CHECK( p.parse( "AAAAA" ) == ParsingResult{ ParsingResult::Type::True, std::string_view( "AAAAA" ) } );
 	CHECK( p.parse( "AAAAAA" ) == ParsingResult{ ParsingResult::Type::True, std::string_view( "AAAAAA" ) } );
 	CHECK( p.parse( "AAAAAAA" ) == ParsingResult{ ParsingResult::Type::True, std::string_view( "AAAAAA" ) } );
+
+	CHECK( p.parse( "A", false ).type == ParsingResult::Type::Incomplete );
+	CHECK( p.parse( "AA", false ).type == ParsingResult::Type::Incomplete );
+	CHECK( p.parse( "AAA", false ).type == ParsingResult::Type::Incomplete );
+	CHECK( p.parse( "AAAAB", false ) == ParsingResult{ ParsingResult::Type::True, std::string_view( "AAAA" ) } );
 }
