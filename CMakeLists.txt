@@ -22,6 +22,7 @@ add_library(${PROJECT_NAME} STATIC
 	src/rule/OptRule.h
 	src/rule/PlusRule.h
 	src/rule/RangeRule.h
+	src/rule/RangesRule.h
 	src/rule/ReparseRule.h
 	src/rule/RepRule.h
 	src/rule/SeqRule.h
@@ -51,6 +52,7 @@ add_executable("${PROJECT_NAME}Test"
 	test/rule/OptRuleTest.cpp
 	test/rule/PlusRuleTest.cpp
 	test/rule/RangeRuleTest.cpp
+	test/rule/RangesRuleTest.cpp
 	test/rule/ReparseRuleTest.cpp
 	test/rule/RepRuleTest.cpp
 	test/rule/SeqRuleTest.cpp
