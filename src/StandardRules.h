@@ -4,6 +4,7 @@
 #include "rule/CharRule.h"
 #include "rule/DiscardRule.h"
 #include "rule/EndRule.h"
+#include "rule/EndingWithRule.h"
 #include "rule/IfRule.h"
 #include "rule/NotRule.h"
 #include "rule/OneRule.h"

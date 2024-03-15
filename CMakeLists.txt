@@ -14,6 +14,7 @@ add_library(${PROJECT_NAME} STATIC
 	src/rule/AnyRule.h
 	src/rule/CharRule.h
 	src/rule/DiscardRule.h
+	src/rule/EndingWithRule.h
 	src/rule/EndRule.h
 	src/rule/IfRule.h
 	src/rule/NotRule.h
@@ -42,6 +43,7 @@ add_executable("${PROJECT_NAME}Test"
 	test/rule/AnyRuleTest.cpp
 	test/rule/CharRuleTest.cpp
 	test/rule/DiscardRuleTest.cpp
+	test/rule/EndingWithRuleTest.cpp
 	test/rule/EndRuleTest.cpp
 	test/rule/IfRuleTest.cpp
 	test/rule/NotRuleTest.cpp
