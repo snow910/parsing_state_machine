@@ -476,15 +476,17 @@ namespace psm
 		};
 	} // namespace detail
 
+	enum class ParsingStatus
+	{
+		Success,
+		Fail,
+		Incomplete
+	};
+
 	struct ParsingResult
 	{
-		enum class Type
-		{
-			True,
-			False,
-			Incomplete
-		} type;
-		std::string_view string;
+		ParsingStatus status;
+		std::string_view match;
 		std::strong_ordering operator<=>( const ParsingResult& other ) const noexcept = default;
 	};
 

@@ -18,7 +18,7 @@ TEST_CASE( "GenA", "[GenA][psm]" )
 	static_assert( detail::rule_info< TR2 >::stack_size == 3 * ( sizeof( Seq< Char< 'A' > > ) + sizeof( Char< 'A' > ) ) + 4 * sizeof( Char< 'A' > ) );
 
 	Parser< GenA< Tag0, 3, Seq< Range< 'a', 'z' >, If< Char< '{' >, Ref< Tag0 > > > > > p;
-	CHECK( p.parse( "a{b{c{d123" ) == ParsingResult{ ParsingResult::Type::True, std::string_view( "a{b{c{d" ) } );
+	CHECK( p.parse( "a{b{c{d123" ) == ParsingResult{ ParsingStatus::Success, std::string_view( "a{b{c{d" ) } );
 }
 
 TEST_CASE( "GenM", "[GenM][psm]" )
@@ -36,5 +36,5 @@ TEST_CASE( "GenM", "[GenM][psm]" )
 	static_assert( detail::rule_info< TR2 >::stack_size == 3 * ( sizeof( Seq< Char< 'A' > > ) + 4 * sizeof( Char< 'A' > ) ) );
 
 	Parser< GenM< Tag0, 3, Seq< Range< 'a', 'z' >, If< Char< '{' >, Ref< Tag0 > > > > > p;
-	CHECK( p.parse( "a{b{c{d123" ) == ParsingResult{ ParsingResult::Type::True, std::string_view( "a{b{c{d" ) } );
+	CHECK( p.parse( "a{b{c{d123" ) == ParsingResult{ ParsingStatus::Success, std::string_view( "a{b{c{d" ) } );
 }

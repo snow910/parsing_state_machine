@@ -51,8 +51,8 @@ TEST_CASE( "Parse continuation ability test", "[psm]" )
 	Parser< Seq< ASymbol, Seq< ASymbol, ASymbol, Seq< ASymbol >, ASymbol >, ASymbol >, ASymbolCounterAction > p;
 	const char* str = "ABCDEF";
 	for( int i = 1; i < 6; ++i )
-		CHECK( p.parse( str, str + i, false ).type == ParsingResult::Type::Incomplete );
-	CHECK( p.parse( str, str + 6, false ) == ParsingResult{ ParsingResult::Type::True, std::string_view( str ) } );
+		CHECK( p.parse( str, str + i, false ).status == ParsingStatus::Incomplete );
+	CHECK( p.parse( str, str + 6, false ) == ParsingResult{ ParsingStatus::Success, std::string_view( str ) } );
 	CHECK( p.actionFunction().n == 6 );
 }
 

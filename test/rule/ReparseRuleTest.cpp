@@ -72,22 +72,22 @@ TEST_CASE( "ReparseRule test", "[ReparseRule][psm]" )
 	// one reparse level
 	{
 		Parser< Plus< Seq< Reparse< Plus< NotChar< '*' > >, SuccessAll >, Any > >, SuccessAction > p;
-		CHECK( p.parse( "012*35678*9*" ) == ParsingResult{ ParsingResult::Type::True, std::string_view( "012*35678*9*" ) } );
+		CHECK( p.parse( "012*35678*9*" ) == ParsingResult{ ParsingStatus::Success, std::string_view( "012*35678*9*" ) } );
 		CHECK( p.actionFunction().n == 3 );
 	}
 
 	// two reparse levels
 	{
 		Parser< Plus< Seq< Reparse< Plus< NotChar< '*' > >, Reparse< SuccessAll, SuccessAll > >, Any > >, SuccessActionX2 > p;
-		CHECK( p.parse( "012*35678*9*" ) == ParsingResult{ ParsingResult::Type::True, std::string_view( "012*35678*9*" ) } );
+		CHECK( p.parse( "012*35678*9*" ) == ParsingResult{ ParsingStatus::Success, std::string_view( "012*35678*9*" ) } );
 		CHECK( p.actionFunction().n == 6 );
 	}
 	{
 		Parser< Plus< Seq< Reparse< Plus< NotChar< '*' > >, Reparse< SuccessAll, SuccessAll > >, Any > >, SuccessActionX2 > p;
 		std::string_view str = "012*35678*9*"sv;
 		for( size_t n = 1; n < str.size(); ++n )
-			CHECK( p.parse( str.substr( 0, n ), false ).type == ParsingResult::Type::Incomplete );
-		CHECK( p.parse( str, true ) == ParsingResult{ ParsingResult::Type::True, std::string_view( "012*35678*9*" ) } );
+			CHECK( p.parse( str.substr( 0, n ), false ).status == ParsingStatus::Incomplete );
+		CHECK( p.parse( str, true ) == ParsingResult{ ParsingStatus::Success, std::string_view( "012*35678*9*" ) } );
 		CHECK( p.actionFunction().n == 6 );
 	}
 
@@ -97,7 +97,7 @@ TEST_CASE( "ReparseRule test", "[ReparseRule][psm]" )
 		using ReparseUpper = Reparse< Star< Range< 'A', 'Z' > >, SuccessAll >;
 		using ReparseLower = Reparse< Star< Range< 'a', 'z' > >, SuccessAll >;
 		Parser< Plus< Seq< Reparse< Plus< NotChar< '*' > >, Seq< ReparseDigit, ReparseLower, ReparseUpper > >, Any > >, SuccessActionV2 > p;
-		CHECK( p.parse( "012abcABC*35678defDEF*9ghiGHI*" ) == ParsingResult{ ParsingResult::Type::True, std::string_view( "012abcABC*35678defDEF*9ghiGHI*" ) } );
+		CHECK( p.parse( "012abcABC*35678defDEF*9ghiGHI*" ) == ParsingResult{ ParsingStatus::Success, std::string_view( "012abcABC*35678defDEF*9ghiGHI*" ) } );
 		CHECK( p.actionFunction().n == 9 );
 	}
 

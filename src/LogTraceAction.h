@@ -40,11 +40,11 @@ namespace psm
 			for( ; p != end && ( p - begin ) + n < 128; ++p )
 			{
 				auto res = parser.parse( p, end );
-				if( res.type == ParsingResult::Type::False )
+				if( res.status == ParsingStatus::Fail )
 					continue;
 				*out_ << std::string_view( begin, p );
 				n += p - begin;
-				p = begin = res.string.data() + res.string.size();
+				p = begin = res.match.data() + res.match.size();
 			}
 			if( ( p - begin ) + n >= 128 )
 				*out_ << std::string_view( begin, p ).substr( 0, 128 - n ) << "...\"\n";

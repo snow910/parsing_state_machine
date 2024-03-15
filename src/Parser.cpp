@@ -13,9 +13,9 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 	if( begin == end )
 	{
 		if( !complete )
-			return { ParsingResult::Type::Incomplete, { begin, 0 } };
+			return { ParsingStatus::Incomplete, { begin, 0 } };
 		else if( isRuleStackEmpty() )
-			return { ParsingResult::Type::False, { begin, 0 } };
+			return { ParsingStatus::Fail, { begin, 0 } };
 	}
 
 	RuleBase* rule;
@@ -37,7 +37,7 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 			if( !complete )
 			{
 				currentPos_->pos = input.current() - begin;
-				return { ParsingResult::Type::Incomplete, { begin, 0 } };
+				return { ParsingStatus::Incomplete, { begin, 0 } };
 			}
 			result.code = RuleMatchCode::True;
 		}
@@ -46,7 +46,7 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 			if( !complete )
 			{
 				currentPos_->pos = input.current() - begin;
-				return { ParsingResult::Type::Incomplete, { begin, 0 } };
+				return { ParsingStatus::Incomplete, { begin, 0 } };
 			}
 			result.code = RuleMatchCode::False;
 		}
@@ -57,7 +57,7 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 			if( currentPos_ + 1 == pPositionsEnd_ )
 			{
 				reset();
-				return { ParsingResult::Type::False, { begin, 0 } };
+				return { ParsingStatus::Fail, { begin, 0 } };
 			}
 			currentPos_->nestedIndex = ( uint16_t )result.callIndex;
 			currentPos_->pos = input.current() - begin;
@@ -83,7 +83,7 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 			{
 				--currentPos_;
 				reset();
-				return { ParsingResult::Type::False, { begin, 0 } };
+				return { ParsingStatus::Fail, { begin, 0 } };
 			}
 			continue;
 		}
@@ -96,11 +96,11 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 					callAction( rule, 0, std::string_view( begin, input.position() ) );
 					popRule( currentPos_->ruleIndex );
 					currentPos_->pos = 0;
-					return { input.position() > 0 ? ParsingResult::Type::True : ParsingResult::Type::False, std::string_view( begin, input.position() ) };
+					return { input.position() > 0 ? ParsingStatus::Success : ParsingStatus::Fail, std::string_view( begin, input.position() ) };
 				}
 				popRule( currentPos_->ruleIndex );
 				currentPos_->pos = 0;
-				return { ParsingResult::Type::False, { begin, 0 } };
+				return { ParsingStatus::Fail, { begin, 0 } };
 			}
 			if( result.code == RuleMatchCode::True )
 				callAction( rule, input.begin() - begin, std::string_view( input.begin(), input.position() ) );
@@ -130,7 +130,7 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 					goto ProcessResult;
 				}
 				currentPos_->pos = input.current() - begin;
-				return { ParsingResult::Type::Incomplete, { begin, 0 } };
+				return { ParsingStatus::Incomplete, { begin, 0 } };
 			}
 			else if( result.code == RuleMatchCode::NotTrueYet )
 			{
@@ -140,12 +140,12 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 					goto ProcessResult;
 				}
 				currentPos_->pos = input.current() - begin;
-				return { ParsingResult::Type::Incomplete, { begin, 0 } };
+				return { ParsingStatus::Incomplete, { begin, 0 } };
 			}
 			goto ProcessResult;
 		}
 	}
-	return { ParsingResult::Type::False, { begin, 0 } };
+	return { ParsingStatus::Fail, { begin, 0 } };
 }
 
 void ParserBase::reset()

@@ -6,6 +6,6 @@ using namespace psm;
 TEST_CASE( "EndRule test", "[EndRule][psm]" )
 {
 	Parser< Seq< Str< 'A', 'B', 'C' >, End > > p;
-	CHECK( p.parse( "ABCDEF" ).type == ParsingResult::Type::False );
-	CHECK( p.parse( "ABC" ) == ParsingResult{ ParsingResult::Type::True, std::string_view( "ABC" ) } );
+	CHECK( p.parse( "ABCDEF" ).status == ParsingStatus::Fail );
+	CHECK( p.parse( "ABC" ) == ParsingResult{ ParsingStatus::Success, std::string_view( "ABC" ) } );
 }
