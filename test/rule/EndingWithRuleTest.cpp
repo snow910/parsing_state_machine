@@ -8,14 +8,14 @@ TEST_CASE( "EndingWithRule test", "[EndingWithRule][psm]" )
 {
 	{
 		Parser< EndingWith< Str< 'A', 'B' > > > p;
-		CHECK( p.parse( "012AB" ) == ParsingResult{ ParsingStatus::Success, std::string_view( "012AB" ) } );
+		CHECK( p.parse( "012AB" ) == ParsingResult{ ParsingStatus::Success, "012AB"sv } );
 		CHECK( p.parse( "012" ).status == ParsingStatus::Fail );
 	}
 	{
 		Parser< EndingWith< Str< 'A', 'B' > > > p;
 		CHECK( p.parse( "012", false ).status == ParsingStatus::Incomplete );
 		CHECK( p.parse( "012A", false ).status == ParsingStatus::Incomplete );
-		CHECK( p.parse( "012AB", false ) == ParsingResult{ ParsingStatus::Success, std::string_view( "012AB" ) } );
+		CHECK( p.parse( "012AB", false ) == ParsingResult{ ParsingStatus::Success, "012AB"sv } );
 	}
 
 	// with reparse
@@ -28,7 +28,7 @@ TEST_CASE( "EndingWithRule test", "[EndingWithRule][psm]" )
 				    return;
 			    CHECK( ( sv == "012"sv ) );
 		    } );
-		CHECK( res == ParsingResult{ ParsingStatus::Success, std::string_view( "012AB" ) } );
+		CHECK( res == ParsingResult{ ParsingStatus::Success, "012AB"sv } );
 
 		int n = 0;
 		res = parseStringView< Star< EndingWith< Str< 'A', 'B' >, SuccessAll > > >(
@@ -48,7 +48,7 @@ TEST_CASE( "EndingWithRule test", "[EndingWithRule][psm]" )
 				    CHECK( ( sv == strs[n] ) );
 			    n++;
 		    } );
-		CHECK( res == ParsingResult{ ParsingStatus::Success, std::string_view( "AB012AB345AB678ABAB" ) } );
+		CHECK( res == ParsingResult{ ParsingStatus::Success, "AB012AB345AB678ABAB"sv } );
 		CHECK( n == 5 );
 	}
 }
