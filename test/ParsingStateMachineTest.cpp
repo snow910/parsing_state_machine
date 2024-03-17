@@ -44,6 +44,16 @@ struct AllCounterAction
 	int n = 0;
 };
 
+struct AbortAction
+{
+	using Rules = std::tuple< Char< '!' > >;
+	template< typename Rule >
+	bool operator()( const Rule& rule, std::size_t pos, const std::string_view& sv )
+	{
+		return false;
+	}
+};
+
 TEST_CASE( "Parse continuation ability test", "[psm]" )
 {
 	int n = 0;
@@ -80,8 +90,8 @@ TEST_CASE( "Quiet test", "[psm]" )
 	int n = 0;
 
 	// Quiet in the middle
-	parseString< Seq< Integer, NotDigit, Quiet< Seq< Integer, NotDigit, Integer > >, NotDigit, Integer > >(
-	    "111 222 333 444",
+	parseStringView< Seq< Integer, NotDigit, Quiet< Seq< Integer, NotDigit, Integer > >, NotDigit, Integer > >(
+	    "111 222 333 444"sv,
 	    [&n]< typename Rule >( const Rule&, std::size_t pos, const std::string_view& sv )
 	    {
 		    if constexpr( !std::is_same_v< Rule, Integer > )
@@ -103,8 +113,8 @@ TEST_CASE( "Quiet test", "[psm]" )
 
 	// Total quiet
 	n = 0;
-	parseString< Quiet< Seq< Integer, NotDigit, Seq< Integer, NotDigit, Integer >, NotDigit, Integer > > >(
-	    "111 222 333 444",
+	parseStringView< Quiet< Seq< Integer, NotDigit, Seq< Integer, NotDigit, Integer >, NotDigit, Integer > > >(
+	    "111 222 333 444"sv,
 	    [&n]< typename Rule >( const Rule&, std::size_t pos, const std::string_view& sv )
 	    {
 		    ++n;
@@ -113,8 +123,8 @@ TEST_CASE( "Quiet test", "[psm]" )
 
 	// Nested quiet
 	n = 0;
-	parseString< Seq< Integer, NotDigit, Quiet< Seq< Integer, NotDigit, Quiet< Integer > > >, NotDigit, Integer > >(
-	    "111 222 333 444",
+	parseStringView< Seq< Integer, NotDigit, Quiet< Seq< Integer, NotDigit, Quiet< Integer > > >, NotDigit, Integer > >(
+	    "111 222 333 444"sv,
 	    [&n]< typename Rule >( const Rule&, std::size_t pos, const std::string_view& sv )
 	    {
 		    if constexpr( !std::is_same_v< Rule, Integer > )
@@ -133,4 +143,79 @@ TEST_CASE( "Quiet test", "[psm]" )
 		    }
 	    } );
 	CHECK( n == 2 );
+}
+
+TEST_CASE( "parseStringView test (action rule filtering)", "[psm]" )
+{
+	size_t nCorrect = 0;
+	size_t nIncorrect = 0;
+	parseStringView< Plus< One< Char< 'A' >, Char< 'B' >, Char< 'C' > > >, std::tuple< Char< 'A' > > >(
+	    "ABC"sv,
+	    [&]< typename Rule >( const Rule& rule, std::size_t pos, const std::string_view& match )
+	    {
+		    if constexpr( std::is_same_v< Rule, Char< 'A' > > )
+			    ++nCorrect;
+		    else
+			    ++nIncorrect;
+	    } );
+	CHECK( nCorrect == 1 );
+	CHECK( nIncorrect == 0 );
+
+	nCorrect = nIncorrect = 0;
+	parseStringView< Plus< One< Char< 'A' >, Char< 'B' >, Char< 'C' > > >, std::tuple< Char< 'A' >, Char< 'B' > > >(
+	    "ABC"sv,
+	    [&]< typename Rule >( const Rule& rule, std::size_t pos, const std::string_view& match )
+	    {
+		    if constexpr( std::is_same_v< Rule, Char< 'A' > > || std::is_same_v< Rule, Char< 'B' > > )
+			    ++nCorrect;
+		    else
+			    ++nIncorrect;
+	    } );
+	CHECK( nCorrect == 2 );
+	CHECK( nIncorrect == 0 );
+
+	nCorrect = nIncorrect = 0;
+	parseStringView< Plus< One< Char< 'A' >, Char< 'B' >, Char< 'C' > > > >(
+	    "ABC"sv,
+	    [&]< typename Rule >( const Rule& rule, std::size_t pos, const std::string_view& match )
+	    {
+		    ++nCorrect;
+	    } );
+	CHECK( nCorrect == 7 );
+}
+
+TEST_CASE( "parseStringView function test (parsing abort)", "[psm]" )
+{
+	auto res = parseStringView< Plus< One< Ranges< 'A', 'Z', 'a', 'z', '0', '9' >, Char< '!' > > >, std::tuple< Char< '!' > > >(
+	    "abc012!DEF345"sv,
+	    []( const auto& rule, std::size_t pos, const std::string_view& match )
+	    {
+		    return false;
+	    } );
+	CHECK( res == ParsingResult{ ParsingStatus::Aborted, "!"sv } );
+}
+
+TEST_CASE( "Parsing reset test", "[psm]" )
+{
+	Parser< Plus< Range< 'A', 'Z' > >, ASymbolCounterAction > p;
+	p.parse( "ABC", false );
+	p.parse( "ABCDEF", false );
+	CHECK( p.actionFunction().n == 6 );
+	p.reset();
+	p.actionFunction().n = 0;
+	p.parse( "ABCDEF", false );
+	CHECK( p.actionFunction().n == 6 );
+}
+
+TEST_CASE( "Parsing abort test", "[psm]" )
+{
+	Parser< Plus< One< Ranges< 'A', 'Z', 'a', 'z', '0', '9' >, Char< '!' > > >, AbortAction > p;
+	CHECK( p.parse( "abc012!DEF345" ) == ParsingResult{ ParsingStatus::Aborted, "!"sv } );
+}
+
+TEST_CASE( "Parsing overflow test", "[psm]" )
+{
+	Parser< GenA< Tag0, 5, Plus< If< Char< '|' >, Ref< Tag0 >, Range< '0', '9' > > > > > p;
+	CHECK( p.parse( "012|3|45|6|78|9" ) == ParsingResult{ ParsingStatus::Success, "012|3|45|6|78|9"sv } );
+	CHECK( p.parse( "012|3|4|5|6|78|9" ).status == ParsingStatus::Overflow );
 }

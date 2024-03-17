@@ -57,7 +57,7 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 			if( currentPos_ + 1 == pPositionsEnd_ )
 			{
 				reset();
-				return { ParsingStatus::Fail, { begin, 0 } };
+				return { ParsingStatus::Overflow, { begin, 0 } };
 			}
 			currentPos_->nestedIndex = ( uint16_t )result.callIndex;
 			currentPos_->pos = input.current() - begin;
@@ -83,7 +83,7 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 			{
 				--currentPos_;
 				reset();
-				return { ParsingStatus::Fail, { begin, 0 } };
+				return { ParsingStatus::Overflow, { begin, 0 } };
 			}
 			continue;
 		}
@@ -103,7 +103,13 @@ ParsingResult ParserBase::parse( const char* begin, const char* end, bool comple
 				return { ParsingStatus::Fail, { begin, 0 } };
 			}
 			if( result.code == RuleMatchCode::True )
-				callAction( rule, input.begin() - begin, std::string_view( input.begin(), input.position() ) );
+			{
+				if( !callAction( rule, input.begin() - begin, std::string_view( input.begin(), input.position() ) ) )
+				{
+					reset();
+					return { ParsingStatus::Aborted, std::string_view( input.begin(), input.position() ) };
+				}
+			}
 			RuleInput nestedInput = input;
 			NestedRuleResult nestedResult( nestedInput );
 			nestedResult.rule = rule;
@@ -152,7 +158,7 @@ void ParserBase::reset()
 {
 	for( ; !isRuleStackEmpty(); --currentPos_ )
 		popRule( currentPos_->ruleIndex );
-	currentPos_->pos = 0;
+	( ++currentPos_ )->pos = 0;
 }
 
 RuleBase* ParserBase::pushRule( std::size_t index )

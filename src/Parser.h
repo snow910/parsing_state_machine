@@ -443,10 +443,33 @@ namespace psm
 		RuleConstructor< Rule > RuleConstructorStorage< Rule >::constructor;
 
 		template< typename Rule, typename Action >
-		void ruleActionFunction( Action& action, const RuleBase* rule, std::size_t pos, const std::string_view& string )
+		bool ruleActionFunction( Action& action, const RuleBase* rule, std::size_t pos, const std::string_view& string )
 		{
-			action( static_cast< const Rule& >( *rule ), pos, string );
+			using ReturnType = std::invoke_result_t< Action, const Rule&, std::size_t, const std::string_view& >;
+			if constexpr( std::is_same_v< bool, ReturnType > )
+				return action( static_cast< const Rule& >( *rule ), pos, string );
+			else
+			{
+				action( static_cast< const Rule& >( *rule ), pos, string );
+				return true;
+			}
 		}
+
+		template< typename Rules_, typename Function >
+		struct ActionMediator
+		{
+			using Rules = Rules_;
+			Function function_;
+
+			template< typename Func_ >
+			inline ActionMediator( Func_&& function ) : function_( std::forward< Func_ >( function ) ) {}
+
+			template< typename Rule >
+			inline auto operator()( const Rule& rule, std::size_t pos, const std::string_view& match )
+			{
+				return function_( rule, pos, match );
+			}
+		};
 
 		struct Nothing
 		{
@@ -480,7 +503,9 @@ namespace psm
 	{
 		Success,
 		Fail,
-		Incomplete
+		Incomplete,
+		Aborted,
+		Overflow
 	};
 
 	struct ParsingResult
@@ -507,7 +532,7 @@ namespace psm
 	protected:
 		struct Position;
 		virtual std::size_t indexForNestedRule( std::size_t ruleIndex, std::size_t nestedIndex ) = 0;
-		virtual void callAction( RuleBase* rule, std::size_t pos, const std::string_view& string ) = 0;
+		virtual bool callAction( RuleBase* rule, std::size_t pos, const std::string_view& string ) = 0;
 		virtual void trace( const RuleInput& input, const RuleResult& result ) = 0;
 		RuleBase* pushRule( std::size_t index );
 		void popRule( std::size_t index );
@@ -584,11 +609,11 @@ namespace psm
 		void initBase();
 
 		std::size_t indexForNestedRule( std::size_t ruleIndex, std::size_t nestedIndex ) override;
-		void callAction( RuleBase* rule, std::size_t pos, const std::string_view& string ) override;
+		bool callAction( RuleBase* rule, std::size_t pos, const std::string_view& string ) override;
 		void trace( const RuleInput& input, const RuleResult& result ) override;
 
 	private:
-		using RuleActionFunction = void ( * )( ActionFunction&, const RuleBase*, std::size_t, const std::string_view& );
+		using RuleActionFunction = bool ( * )( ActionFunction&, const RuleBase*, std::size_t, const std::string_view& );
 		ActionFunction actionFunc_;
 		std::array< RuleInfo, std::tuple_size_v< UniqueRules > > ruleInfos_;
 		std::array< IndexType, IndexArraySize > indexes_;
@@ -683,15 +708,16 @@ namespace psm
 	}
 
 	template< typename Rule, typename ActionFunction >
-	void Parser< Rule, ActionFunction >::callAction( RuleBase* rule, std::size_t pos, const std::string_view& string )
+	bool Parser< Rule, ActionFunction >::callAction( RuleBase* rule, std::size_t pos, const std::string_view& string )
 	{
 		if constexpr( !UseActionFunction )
-			return;
+			return true;
 		if( quietCounter_ )
-			return;
+			return true;
 		auto func = reinterpret_cast< RuleActionFunction >( ruleInfos_[currentPos_->ruleIndex].func );
 		if( func )
-			func( actionFunc_, rule, pos, string );
+			return func( actionFunc_, rule, pos, string );
+		return true;
 	}
 
 	template< typename Rule, typename ActionFunction >
@@ -701,11 +727,19 @@ namespace psm
 			actionFunc_.trace( currentPos_ - &positions_.front(), input, result, ruleInfos_[currentPos_->ruleIndex].constructor->name() );
 	}
 
-	template< typename Rule, typename ActionFunction >
+	template< typename Rule, typename ActionRules = std::tuple<>, typename ActionFunction >
 	inline ParsingResult parseStringView( std::string_view string, ActionFunction&& action )
 	{
-		Parser< Rule, std::decay_t< ActionFunction > > parser( std::forward< ActionFunction >( action ) );
-		return parser.parse( string );
+		if constexpr( std::is_same_v< std::tuple<>, ActionRules > )
+		{
+			Parser< Rule, std::decay_t< ActionFunction > > parser( std::forward< ActionFunction >( action ) );
+			return parser.parse( string );
+		}
+		else
+		{
+			Parser< Rule, detail::ActionMediator< ActionRules, std::decay_t< ActionFunction > > > parser( std::forward< ActionFunction >( action ) );
+			return parser.parse( string );
+		}
 	}
 
 	template< typename Rule >
@@ -713,17 +747,5 @@ namespace psm
 	{
 		Parser< Rule > parser;
 		return parser.parse( string );
-	}
-
-	template< typename Rule, typename ActionFunction, size_t N >
-	inline ParsingResult parseString( const char ( &string )[N], ActionFunction&& action )
-	{
-		return parseStringView< Rule >( std::string_view( string, N - 1 ), std::forward< ActionFunction >( action ) );
-	}
-
-	template< typename Rule, size_t N >
-	inline ParsingResult parseString( const char ( &string )[N] )
-	{
-		return parseStringView< Rule >( std::string_view( string, N - 1 ) );
 	}
 } // namespace psm
