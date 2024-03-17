@@ -1,59 +1,80 @@
 #pragma once
 
 #include "../Rule.h"
-#include <cstring>
 
 namespace psm
 {
-	template< char C >
+	namespace detail
+	{
+		template< char... Chars_ >
+		struct CharsStorage
+		{
+			static constexpr char array[] = { Chars_... };
+		};
+	} // namespace detail
+
+	template< char C, char... Cs >
 	class Char : public RuleBase
 	{
-	public:
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			if( input.empty() )
-				return { RuleMatchCode::NotTrueYet };
-			if( *input.current() == C )
-			{
-				input.consume();
-				return { RuleMatchCode::True };
-			}
-			return { RuleMatchCode::False };
-		}
-	};
+		using Storage = detail::CharsStorage< C, Cs... >;
 
-	template< char C >
-	class NotChar : public RuleBase
-	{
 	public:
 		RuleResult match( RuleInputRef input, void* states ) override
 		{
 			if( input.empty() )
 				return { RuleMatchCode::NotTrueYet };
-			if( *input.current() != C )
+			char c = *input.current();
+			if constexpr( sizeof...( Cs ) == 0 )
 			{
-				input.consume();
-				return { RuleMatchCode::True };
+				if( c == Storage::array[0] )
+				{
+					input.consume();
+					return { RuleMatchCode::True };
+				}
+			}
+			else
+			{
+				for( size_t i = 0; i < sizeof...( Cs ) + 1; ++i )
+				{
+					if( c == Storage::array[i] )
+					{
+						input.consume();
+						return { RuleMatchCode::True };
+					}
+				}
 			}
 			return { RuleMatchCode::False };
 		}
 	};
 
 	template< char C, char... Cs >
-	class Str : public RuleBase
+	class NotChar : public RuleBase
 	{
+		using Storage = detail::CharsStorage< C, Cs... >;
+
 	public:
 		RuleResult match( RuleInputRef input, void* states ) override
 		{
-			static constexpr std::array< const char, sizeof...( Cs ) + 1 > str{ C, Cs... };
-			if( str.size() - input.position() > input.size() )
+			if( input.empty() )
 				return { RuleMatchCode::NotTrueYet };
-			if( strncmp( str.data(), input.current(), str.size() ) == 0 )
+			char c = *input.current();
+			if constexpr( sizeof...( Cs ) == 0 )
 			{
-				input.consume( str.size() );
+				if( c == Storage::array[0] )
+					return { RuleMatchCode::False };
+				input.consume();
 				return { RuleMatchCode::True };
 			}
-			return { RuleMatchCode::False };
+			else
+			{
+				for( size_t i = 0; i < sizeof...( Cs ) + 1; ++i )
+				{
+					if( c == Storage::array[i] )
+						return { RuleMatchCode::False };
+				}
+				input.consume();
+				return { RuleMatchCode::True };
+			}
 		}
 	};
 } // namespace psm

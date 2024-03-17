@@ -21,12 +21,12 @@ add_library(${PROJECT_NAME} STATIC
 	src/rule/OneRule.h
 	src/rule/OptRule.h
 	src/rule/PlusRule.h
-	src/rule/RangeRule.h
 	src/rule/RangesRule.h
 	src/rule/ReparseRule.h
 	src/rule/RepRule.h
 	src/rule/SeqRule.h
 	src/rule/StarRule.h
+	src/rule/StrRule.h
 	src/rule/SuccessRule.h
 	src/rule/UntilRule.h
 	src/LogTraceAction.h
@@ -51,12 +51,12 @@ add_executable("${PROJECT_NAME}Test"
 	test/rule/OneRuleTest.cpp
 	test/rule/OptRuleTest.cpp
 	test/rule/PlusRuleTest.cpp
-	test/rule/RangeRuleTest.cpp
 	test/rule/RangesRuleTest.cpp
 	test/rule/ReparseRuleTest.cpp
 	test/rule/RepRuleTest.cpp
 	test/rule/SeqRuleTest.cpp
 	test/rule/StarRuleTest.cpp
+	test/rule/StrRuleTest.cpp
 	test/rule/UntilRuleTest.cpp
 	test/GeneratorTest.cpp
 	test/JsonTest.cpp

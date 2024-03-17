@@ -19,14 +19,14 @@ namespace json_test
 		struct BooleanValue : One< Str< 't', 'r', 'u', 'e' >, Str< 'f', 'a', 'l', 's', 'e' > >
 		{
 		};
-		struct StringValue : Seq< Char< '"' >, Star< One< Range< 'a', 'z' >, Range< 'A', 'Z' >, Range< '0', '9' >, Char< ' ' >, Char< '_' > > >, Char< '"' > >
+		struct StringValue : Seq< Char< '"' >, Star< One< Ranges< 'a', 'z', 'A', 'Z', '0', '9' >, Char< ' ', '_' > > >, Char< '"' > >
 		{
 		};
 		using Value = One< StringValue, IntegerValue, BooleanValue >;
-		struct Name : Seq< Char< '"' >, Plus< One< Range< 'a', 'z' >, Range< 'A', 'Z' >, Range< '0', '9' >, Char< '_' > > >, Char< '"' > >
+		struct Name : Seq< Char< '"' >, Plus< One< Ranges< 'a', 'z', 'A', 'Z', '0', '9' >, Char< '_' > > >, Char< '"' > >
 		{
 		};
-		using Space = Star< One< Char< ' ' >, Char< '\n' >, Char< '\t' > > >;
+		using Space = Star< One< Char< ' ', '\n', '\t' > > >;
 		using ArrayCore = Seq< Space, If< Char< '{' >, Ref< Tag0 >, If< Char< '[' >, Ref< Tag1 >, Value > > >;
 		using Array = GenA< Tag1, 5, Seq< ArrayCore, Space, Star< Seq< Char< ',' >, ArrayCore, Space > >, Char< ']' > > >;
 		using ObjectCore = Seq< Space, Name, Space, Char< ':' >, Space, If< Char< '{' >, Ref< Tag0 >, If< Char< '[' >, Array, Value > > >;

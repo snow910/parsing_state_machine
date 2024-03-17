@@ -32,13 +32,16 @@ TEST_CASE( "CharRule test", "[CharRule][psm]" )
 	}
 
 	{
-		Parser< Str< 'A', 'B', 'C' > > p;
-		CHECK( p.parse( "ABCDE" ) == ParsingResult{ ParsingStatus::Success, std::string_view( "ABC" ) } );
-
-		CHECK( p.parse( "A", false ).status == ParsingStatus::Incomplete );
-		CHECK( p.parse( "AB", false ).status == ParsingStatus::Incomplete );
-		CHECK( p.parse( "ABC", false ) == ParsingResult{ ParsingStatus::Success, std::string_view( "ABC" ) } );
-
-		CHECK( p.parse( "0ABCD", false ).status == ParsingStatus::Fail );
+		Parser< Char< 'A', 'B', 'C' > > p;
+		CHECK( p.parse( "ABC" ) == ParsingResult{ ParsingStatus::Success, std::string_view( "A" ) } );
+		CHECK( p.parse( "BCA" ) == ParsingResult{ ParsingStatus::Success, std::string_view( "B" ) } );
+		CHECK( p.parse( "CAB" ) == ParsingResult{ ParsingStatus::Success, std::string_view( "C" ) } );
+	}
+	{
+		Parser< NotChar< 'A', 'B', 'C' > > p;
+		CHECK( p.parse( "ABC" ).status == ParsingStatus::Fail );
+		CHECK( p.parse( "BCA" ).status == ParsingStatus::Fail );
+		CHECK( p.parse( "CAB" ).status == ParsingStatus::Fail );
+		CHECK( p.parse( "DABC" ) == ParsingResult{ ParsingStatus::Success, std::string_view( "D" ) } );
 	}
 }

@@ -1,26 +1,14 @@
 #pragma once
 
-#include "../Rule.h"
+#include "CharRule.h"
 
 namespace psm
 {
-	namespace detail
-	{
-		template< char... Chars >
-		struct RangesStorage
-		{
-			static constexpr char ranges[] = { Chars... };
-		};
-
-		/*template< char... Chars >
-		const char RangesStorage< Chars... >::ranges[] = { Chars... };*/
-	} // namespace detail
-
 	template< char... Chars >
 	class Ranges : public RuleBase
 	{
 		static_assert( sizeof...( Chars ) >= 2 && ( sizeof...( Chars ) & 1 ) == 0 );
-		using Storage = detail::RangesStorage< Chars... >;
+		using Storage = detail::CharsStorage< Chars... >;
 
 	public:
 		RuleResult match( RuleInputRef input, void* states ) override
@@ -28,12 +16,23 @@ namespace psm
 			if( input.empty() )
 				return { RuleMatchCode::NotTrueYet };
 			char c = *input.current();
-			for( size_t i = 0; i < sizeof...( Chars ); i += 2 )
+			if constexpr( sizeof...( Chars ) == 2 )
 			{
-				if( c >= Storage::ranges[i] && c <= Storage::ranges[i + 1] )
+				if( c >= Storage::array[0] && c <= Storage::array[1] )
 				{
 					input.consume();
 					return { RuleMatchCode::True };
+				}
+			}
+			else
+			{
+				for( size_t i = 0; i < sizeof...( Chars ); i += 2 )
+				{
+					if( c >= Storage::array[i] && c <= Storage::array[i + 1] )
+					{
+						input.consume();
+						return { RuleMatchCode::True };
+					}
 				}
 			}
 			return { RuleMatchCode::False };
@@ -44,7 +43,7 @@ namespace psm
 	class NotRanges : public RuleBase
 	{
 		static_assert( sizeof...( Chars ) >= 2 && ( sizeof...( Chars ) & 1 ) == 0 );
-		using Storage = detail::RangesStorage< Chars... >;
+		using Storage = detail::CharsStorage< Chars... >;
 
 	public:
 		RuleResult match( RuleInputRef input, void* states ) override
@@ -52,13 +51,31 @@ namespace psm
 			if( input.empty() )
 				return { RuleMatchCode::NotTrueYet };
 			char c = *input.current();
-			for( size_t i = 0; i < sizeof...( Chars ); i += 2 )
+			if constexpr( sizeof...( Chars ) == 2 )
 			{
-				if( c >= Storage::ranges[i] && c <= Storage::ranges[i + 1] )
+				if( c >= Storage::array[0] && c <= Storage::array[1] )
 					return { RuleMatchCode::False };
+			}
+			else
+			{
+				for( size_t i = 0; i < sizeof...( Chars ); i += 2 )
+				{
+					if( c >= Storage::array[i] && c <= Storage::array[i + 1] )
+						return { RuleMatchCode::False };
+				}
 			}
 			input.consume();
 			return { RuleMatchCode::True };
 		}
+	};
+
+	template< char Begin, char End >
+	using Range = Ranges< Begin, End >;
+
+	template< char Begin, char End >
+	using NotRange = NotRanges< Begin, End >;
+
+	class Digit : public Range< '0', '9' >
+	{
 	};
 } // namespace psm

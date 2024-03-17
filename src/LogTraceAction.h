@@ -31,7 +31,7 @@ namespace psm
 
 			using Class = Str< 'c', 'l', 'a', 's', 's' >;
 			using Struct = Str< 's', 't', 'r', 'u', 'c', 't' >;
-			using Identifier = Seq< One< Char< '_' >, Range< 'a', 'z' >, Range< 'A', 'Z' > >, Star< One< Char< '_' >, Range< 'a', 'z' >, Range< 'A', 'Z' >, Range< '0', '9' > > > >;
+			using Identifier = Seq< One< Char< '_' >, Ranges< 'a', 'z', 'A', 'Z' > >, Star< One< Char< '_' >, Ranges< 'a', 'z', 'A', 'Z', '0', '9' > > > >;
 			Parser< One< Seq< One< Class, Struct >, Char< ' ' >, Plus< Seq< Identifier, Str< ':', ':' > > > >, Plus< Char< ' ' > > > > parser;
 			const char* begin = name.data();
 			const char* end = &name.back() + 1;

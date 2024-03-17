@@ -10,12 +10,12 @@
 #include "rule/OneRule.h"
 #include "rule/OptRule.h"
 #include "rule/PlusRule.h"
-#include "rule/RangeRule.h"
 #include "rule/RangesRule.h"
 #include "rule/RepRule.h"
 #include "rule/ReparseRule.h"
 #include "rule/SeqRule.h"
 #include "rule/StarRule.h"
+#include "rule/StrRule.h"
 #include "rule/SuccessRule.h"
 #include "rule/UntilRule.h"
 
