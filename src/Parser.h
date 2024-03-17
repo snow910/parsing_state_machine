@@ -409,11 +409,35 @@ namespace psm
 			virtual RuleBase* construct( void* mem ) const noexcept = 0;
 			virtual std::size_t size() const noexcept = 0;
 			virtual bool isQuiet() const noexcept = 0;
+		};
+
+		struct TracingRuleConstructorBase : RuleConstructorBase
+		{
 			virtual std::string_view name() const noexcept = 0;
 		};
 
+		template< typename Rule, bool Tracing >
+		struct RuleConstructor;
+
 		template< typename Rule >
-		struct RuleConstructor : RuleConstructorBase
+		struct RuleConstructor< Rule, false > : RuleConstructorBase
+		{
+			RuleBase* construct( void* mem ) const noexcept override
+			{
+				return new( mem ) Rule;
+			}
+			std::size_t size() const noexcept override
+			{
+				return sizeof( Rule );
+			}
+			bool isQuiet() const noexcept override
+			{
+				return is_quiet_rule< Rule >::value;
+			}
+		};
+
+		template< typename Rule >
+		struct RuleConstructor< Rule, true > : TracingRuleConstructorBase
 		{
 			RuleBase* construct( void* mem ) const noexcept override
 			{
@@ -433,14 +457,14 @@ namespace psm
 			}
 		};
 
-		template< typename Rule >
+		template< typename Rule, bool Tracing >
 		struct RuleConstructorStorage
 		{
-			static RuleConstructor< Rule > constructor;
+			static RuleConstructor< Rule, Tracing > constructor;
 		};
 
-		template< typename Rule >
-		RuleConstructor< Rule > RuleConstructorStorage< Rule >::constructor;
+		template< typename Rule, bool Tracing >
+		RuleConstructor< Rule, Tracing > RuleConstructorStorage< Rule, Tracing >::constructor;
 
 		template< typename Rule, typename Action >
 		bool ruleActionFunction( Action& action, const RuleBase* rule, std::size_t pos, const std::string_view& string )
@@ -665,7 +689,7 @@ namespace psm
 	inline void Parser< Rule, ActionFunction >::initRule( std::size_t& n )
 	{
 		using CRule = std::tuple_element_t< Id, UniqueRules >;
-		ruleInfos_[Id].constructor = &detail::RuleConstructorStorage< CRule >::constructor;
+		ruleInfos_[Id].constructor = &detail::RuleConstructorStorage< CRule, Tracing >::constructor;
 		if constexpr( std::tuple_size_v< typename CRule::Rules > != 0 )
 		{
 			ruleInfos_[Id].nestedRuleIndexes = &indexes_[n];
@@ -724,7 +748,8 @@ namespace psm
 	void Parser< Rule, ActionFunction >::trace( const RuleInput& input, const RuleResult& result )
 	{
 		if constexpr( Tracing )
-			actionFunc_.trace( currentPos_ - &positions_.front(), input, result, ruleInfos_[currentPos_->ruleIndex].constructor->name() );
+			actionFunc_.trace( currentPos_ - &positions_.front(), input, result,
+					   static_cast< detail::TracingRuleConstructorBase* >( ruleInfos_[currentPos_->ruleIndex].constructor )->name() );
 	}
 
 	template< typename Rule, typename ActionRules = std::tuple<>, typename ActionFunction >

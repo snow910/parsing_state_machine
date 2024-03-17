@@ -60,6 +60,7 @@ add_executable("${PROJECT_NAME}Test"
 	test/rule/UntilRuleTest.cpp
 	test/GeneratorTest.cpp
 	test/JsonTest.cpp
+	test/LogTraceActionTest.cpp
 	test/ParsingStateMachineTest.cpp
 )
 set_target_properties("${PROJECT_NAME}Test" PROPERTIES CXX_STANDARD 20)
