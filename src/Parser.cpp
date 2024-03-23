@@ -163,31 +163,31 @@ void ParserBase::reset()
 
 RuleBase* ParserBase::pushRule( std::size_t index )
 {
-	if( stackTop_ + pRuleInfos_[index].constructor->size() > ruleStackEnd_ )
+	if( stackTop_ + pConstructors_[index]->size() > ruleStackEnd_ )
 		return nullptr;
-	RuleBase* rule = pRuleInfos_[index].constructor->construct( stackTop_ );
-	stackTop_ += pRuleInfos_[index].constructor->size();
-	if( pRuleInfos_[index].constructor->isQuiet() )
+	RuleBase* rule = pConstructors_[index]->construct( stackTop_ );
+	stackTop_ += pConstructors_[index]->size();
+	if( pConstructors_[index]->isQuiet() )
 		++quietCounter_;
 	return rule;
 }
 
 void ParserBase::popRule( std::size_t index )
 {
-	stackTop_ -= pRuleInfos_[index].constructor->size();
+	stackTop_ -= pConstructors_[index]->size();
 	reinterpret_cast< RuleBase* >( stackTop_ )->~RuleBase();
-	if( pRuleInfos_[index].constructor->isQuiet() )
+	if( pConstructors_[index]->isQuiet() )
 		--quietCounter_;
 }
 
 RuleBase* ParserBase::topRule( std::size_t index )
 {
-	return reinterpret_cast< RuleBase* >( stackTop_ - pRuleInfos_[index].constructor->size() );
+	return reinterpret_cast< RuleBase* >( stackTop_ - pConstructors_[index]->size() );
 }
 
 RuleBase* ParserBase::previousRule( std::size_t topIntex, std::size_t prevIndex )
 {
-	return reinterpret_cast< RuleBase* >( stackTop_ - pRuleInfos_[topIntex].constructor->size() - pRuleInfos_[prevIndex].constructor->size() );
+	return reinterpret_cast< RuleBase* >( stackTop_ - pConstructors_[topIntex]->size() - pConstructors_[prevIndex]->size() );
 }
 
 bool ParserBase::isRuleStackEmpty() const noexcept

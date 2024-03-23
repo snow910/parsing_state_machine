@@ -12,6 +12,9 @@ namespace psm
 {
 	namespace detail
 	{
+		//===========================================================================================================================================
+		// meta functions
+
 		template< typename Type, Type V, Type... Vs >
 		struct _sum
 		{
@@ -58,6 +61,18 @@ namespace psm
 		struct integer_sequence_sum< std::integer_sequence< T, Vs... > > : sum< T, Vs... >
 		{
 		};
+
+		template< typename Seq0, typename Seq1 >
+		struct integer_sequence_cat2;
+
+		template< typename Type, Type... Vs0, Type... Vs1 >
+		struct integer_sequence_cat2< std::integer_sequence< Type, Vs0... >, std::integer_sequence< Type, Vs1... > >
+		{
+			using type = std::integer_sequence< Type, Vs0..., Vs1... >;
+		};
+
+		template< typename Seq0, typename Seq1 >
+		using integer_sequence_cat2_t = typename integer_sequence_cat2< Seq0, Seq1 >::type;
 
 		template< std::size_t Id, typename T, typename T0, typename... Ts >
 		struct _tuple_element_index
@@ -228,6 +243,7 @@ namespace psm
 		using tuple_cat_t = typename tuple_cat< Tuples... >::type;
 
 		//===========================================================================================================================================
+		// rule info
 
 		template< typename... RuleInfos >
 		struct unite_rules_info
@@ -404,6 +420,66 @@ namespace psm
 		{
 		};
 
+		template< typename UniqueRules, typename Generators, typename... Rules >
+		struct _subrule_index_sequence
+		{
+		};
+
+		template< typename UniqueRules, typename Generators, typename Rule, typename... Others >
+		struct _subrule_index_sequence< UniqueRules, Generators, Rule, Others... >
+		{
+			using _current = index_sequence_for_part_in_whole_t< UniqueRules, detail::gen_ref_substitution_t< Generators, typename Rule::Rules > >;
+			using type = integer_sequence_cat2_t< _current, typename _subrule_index_sequence< UniqueRules, Generators, Others... >::type >;
+		};
+
+		template< typename UniqueRules, typename Generators, typename Rule >
+		struct _subrule_index_sequence< UniqueRules, Generators, Rule >
+		{
+			using type = index_sequence_for_part_in_whole_t< UniqueRules, detail::gen_ref_substitution_t< Generators, typename Rule::Rules > >;
+		};
+
+		template< typename UniqueRules, typename Generators >
+		struct subrule_index_sequence;
+
+		template< typename... UniqueRules, typename Generators >
+		struct subrule_index_sequence< std::tuple< UniqueRules... >, Generators > : _subrule_index_sequence< std::tuple< UniqueRules... >, Generators, UniqueRules... >
+		{
+		};
+
+		template< typename UniqueRules, typename Generators >
+		using subrule_index_sequence_t = typename subrule_index_sequence< UniqueRules, Generators >::type;
+
+		template< size_t Offset, typename Ids, typename... Rules >
+		struct _subrule_index_offset_sequence
+		{
+		};
+
+		template< std::size_t Offset, std::size_t... Ids, typename Rule, typename... Others >
+		struct _subrule_index_offset_sequence< Offset, std::index_sequence< Ids... >, Rule, Others... >
+		    : _subrule_index_offset_sequence< Offset + std::tuple_size_v< typename Rule::Rules >, std::index_sequence< Ids..., Offset >, Others... >
+		{
+		};
+
+		template< size_t Offset, std::size_t... Ids, typename Rule >
+		struct _subrule_index_offset_sequence< Offset, std::index_sequence< Ids... >, Rule >
+		{
+			using type = std::index_sequence< Ids..., Offset >;
+		};
+
+		template< typename Rules >
+		struct subrule_index_offset_sequence;
+
+		template< typename... Rules >
+		struct subrule_index_offset_sequence< std::tuple< Rules... > > : _subrule_index_offset_sequence< 0, std::index_sequence<>, Rules... >
+		{
+		};
+
+		template< typename Rules >
+		using subrule_index_offset_sequence_t = typename subrule_index_offset_sequence< Rules >::type;
+
+		//===========================================================================================================================================
+		// rule constraction
+
 		struct RuleConstructorBase
 		{
 			virtual RuleBase* construct( void* mem ) const noexcept = 0;
@@ -460,11 +536,11 @@ namespace psm
 		template< typename Rule, bool Tracing >
 		struct RuleConstructorStorage
 		{
-			static RuleConstructor< Rule, Tracing > constructor;
+			static constexpr RuleConstructor< Rule, Tracing > constructor;
 		};
 
-		template< typename Rule, bool Tracing >
-		RuleConstructor< Rule, Tracing > RuleConstructorStorage< Rule, Tracing >::constructor;
+		//===========================================================================================================================================
+		// rule action
 
 		template< typename Rule, typename Action >
 		bool ruleActionFunction( Action& action, const RuleBase* rule, std::size_t pos, const std::string_view& string )
@@ -489,7 +565,7 @@ namespace psm
 			inline ActionMediator( Func_&& function ) : function_( std::forward< Func_ >( function ) ) {}
 
 			template< typename Rule >
-			inline auto operator()( const Rule& rule, std::size_t pos, const std::string_view& match )
+			inline decltype( auto ) operator()( const Rule& rule, std::size_t pos, const std::string_view& match )
 			{
 				return function_( rule, pos, match );
 			}
@@ -512,6 +588,9 @@ namespace psm
 			using rules = typename Type::Rules;
 		};
 
+		template< typename Type >
+		using action_rules_t = typename action_rules< Type >::rules;
+
 		template< typename Type, typename = void >
 		struct is_tracing_enabled : std::false_type
 		{
@@ -520,6 +599,57 @@ namespace psm
 		template< typename Type >
 		struct is_tracing_enabled< Type, std::enable_if_t< Type::PsmTracing == true > > : std::true_type
 		{
+		};
+
+		template< typename Type >
+		constexpr bool is_tracing_enabled_v = is_tracing_enabled< Type >::value;
+
+		template< typename Rule, typename ActionFunction >
+		constexpr bool is_rule_action_enabled_v = !std::is_same_v< action_rules_t< ActionFunction >, std::tuple< NaR > > &&
+							  ( std::tuple_size_v< action_rules_t< ActionFunction > > == 0 ||
+							    detail::tuple_element_index_v< Rule, action_rules_t< ActionFunction > > != ( std::size_t )-1 );
+
+		template< typename ActionFunction >
+		using RuleActionFunction = bool ( * )( ActionFunction&, const RuleBase*, std::size_t, const std::string_view& );
+
+		template< typename Rule, typename ActionFunction >
+		constexpr RuleActionFunction< ActionFunction > getRuleActionFunction()
+		{
+			if constexpr( is_rule_action_enabled_v< Rule, ActionFunction > )
+				return &ruleActionFunction< Rule, ActionFunction >;
+			else
+				return nullptr;
+		}
+
+		//===========================================================================================================================================
+		// constexpr array storage
+
+		template< typename Type, typename Values >
+		struct ArrayStorage;
+
+		template< typename Type, typename ValueType, ValueType... Values >
+		struct ArrayStorage< Type, std::integer_sequence< ValueType, Values... > >
+		{
+			static constexpr std::array< Type, sizeof...( Values ) > array{ static_cast< Type >( Values )... };
+		};
+
+		template< typename Rules, bool Tracing >
+		struct RuleConstructorArrayStorage;
+
+		template< typename... Rules, bool Tracing >
+		struct RuleConstructorArrayStorage< std::tuple< Rules... >, Tracing >
+		{
+			static constexpr std::array< const RuleConstructorBase*, sizeof...( Rules ) > array{ static_cast< const RuleConstructorBase* >(
+			    &RuleConstructorStorage< Rules, Tracing >::constructor )... };
+		};
+
+		template< typename ActionFunction, typename Rules >
+		struct RuleActionFunctionArrayStorage;
+
+		template< typename ActionFunction, typename... Rules >
+		struct RuleActionFunctionArrayStorage< ActionFunction, std::tuple< Rules... > >
+		{
+			static constexpr std::array< RuleActionFunction< ActionFunction >, sizeof...( Rules ) > array{ getRuleActionFunction< Rules, ActionFunction >()... };
 		};
 	} // namespace detail
 
@@ -574,14 +704,8 @@ namespace psm
 			uint16_t callOnMatch : 1;
 			std::size_t pos;
 		};
-		struct RuleInfo
-		{
-			detail::RuleConstructorBase* constructor;
-			void* nestedRuleIndexes;
-			void* func;
-		};
 		void* states_ = nullptr;
-		RuleInfo* pRuleInfos_;
+		detail::RuleConstructorBase const* const* pConstructors_;
 		Position* pPositions_;
 		Position* pPositionsEnd_;
 		Position* currentPos_;
@@ -617,18 +741,10 @@ namespace psm
 	private:
 		static constexpr std::size_t IndexArraySize = detail::dependent_rule_count< UniqueRules >::value;
 		using IndexType = std::conditional_t< IndexArraySize <= 256, uint8_t, uint16_t >;
-
-		template< std::size_t Id >
-		inline void initIndex( std::size_t& n );
-
-		template< std::size_t... Ids >
-		inline void initIndexes( std::size_t& n, std::index_sequence< Ids... > );
-
-		template< std::size_t Id >
-		inline void initRule( std::size_t& n );
-
-		template< std::size_t... Ids >
-		void initRuleInfos( std::index_sequence< Ids... > );
+		static constexpr auto& constructors_ = detail::RuleConstructorArrayStorage< UniqueRules, Tracing >::array;
+		static constexpr auto& indexes_ = detail::ArrayStorage< IndexType, detail::subrule_index_sequence_t< UniqueRules, Generators > >::array;
+		static constexpr auto& offsets_ = detail::ArrayStorage< IndexType, detail::subrule_index_offset_sequence_t< UniqueRules > >::array;
+		static constexpr auto& ruleActionFuncs_ = detail::RuleActionFunctionArrayStorage< ActionFunction, UniqueRules >::array;
 
 		void initBase();
 
@@ -637,10 +753,7 @@ namespace psm
 		void trace( const RuleInput& input, const RuleResult& result ) override;
 
 	private:
-		using RuleActionFunction = bool ( * )( ActionFunction&, const RuleBase*, std::size_t, const std::string_view& );
 		ActionFunction actionFunc_;
-		std::array< RuleInfo, std::tuple_size_v< UniqueRules > > ruleInfos_;
-		std::array< IndexType, IndexArraySize > indexes_;
 		std::array< Position, RuleTypeInfo::max_deep > positions_;
 		std::array< uint8_t, RuleTypeInfo::stack_size > ruleStackData_;
 	};
@@ -648,14 +761,12 @@ namespace psm
 	template< typename Rule, typename ActionFunction >
 	Parser< Rule, ActionFunction >::Parser()
 	{
-		initRuleInfos( std::make_index_sequence< std::tuple_size_v< UniqueRules > >{} );
 		initBase();
 	}
 
 	template< typename Rule, typename ActionFunction >
 	Parser< Rule, ActionFunction >::Parser( ActionFunction func ) : actionFunc_( std::move( func ) )
 	{
-		initRuleInfos( std::make_index_sequence< std::tuple_size_v< UniqueRules > >{} );
 		initBase();
 	}
 
@@ -671,50 +782,9 @@ namespace psm
 	}
 
 	template< typename Rule, typename ActionFunction >
-	template< std::size_t Id >
-	inline void Parser< Rule, ActionFunction >::initIndex( std::size_t& n )
-	{
-		indexes_[n++] = ( IndexType )Id;
-	}
-
-	template< typename Rule, typename ActionFunction >
-	template< std::size_t... Ids >
-	inline void Parser< Rule, ActionFunction >::initIndexes( std::size_t& n, std::index_sequence< Ids... > )
-	{
-		( initIndex< Ids >( n ), ... );
-	}
-
-	template< typename Rule, typename ActionFunction >
-	template< std::size_t Id >
-	inline void Parser< Rule, ActionFunction >::initRule( std::size_t& n )
-	{
-		using CRule = std::tuple_element_t< Id, UniqueRules >;
-		ruleInfos_[Id].constructor = &detail::RuleConstructorStorage< CRule, Tracing >::constructor;
-		if constexpr( std::tuple_size_v< typename CRule::Rules > != 0 )
-		{
-			ruleInfos_[Id].nestedRuleIndexes = &indexes_[n];
-			initIndexes( n, detail::index_sequence_for_part_in_whole_t< UniqueRules, detail::gen_ref_substitution_t< Generators, typename CRule::Rules > >{} );
-		}
-		else
-			ruleInfos_[Id].nestedRuleIndexes = nullptr;
-		if constexpr( UseActionFunction && ( std::tuple_size_v< ActionRules > == 0 || detail::tuple_element_index_v< CRule, ActionRules > != ( std::size_t )-1 ) )
-			ruleInfos_[Id].func = reinterpret_cast< void* >( &detail::ruleActionFunction< CRule, ActionFunction > );
-		else
-			ruleInfos_[Id].func = nullptr;
-	}
-
-	template< typename Rule, typename ActionFunction >
-	template< std::size_t... Ids >
-	void Parser< Rule, ActionFunction >::initRuleInfos( std::index_sequence< Ids... > )
-	{
-		std::size_t n = 0;
-		( initRule< Ids >( n ), ... );
-	}
-
-	template< typename Rule, typename ActionFunction >
 	void Parser< Rule, ActionFunction >::initBase()
 	{
-		pRuleInfos_ = &ruleInfos_.front();
+		pConstructors_ = &constructors_.front();
 		pPositions_ = &positions_.front();
 		pPositionsEnd_ = &positions_.back() + 1;
 		ruleStackBegin_ = &ruleStackData_.front();
@@ -728,7 +798,7 @@ namespace psm
 	template< typename Rule, typename ActionFunction >
 	std::size_t Parser< Rule, ActionFunction >::indexForNestedRule( std::size_t ruleIndex, std::size_t nestedIndex )
 	{
-		return static_cast< std::size_t >( static_cast< IndexType* >( ruleInfos_[ruleIndex].nestedRuleIndexes )[nestedIndex] );
+		return static_cast< std::size_t >( indexes_[offsets_[ruleIndex] + nestedIndex] );
 	}
 
 	template< typename Rule, typename ActionFunction >
@@ -738,7 +808,7 @@ namespace psm
 			return true;
 		if( quietCounter_ )
 			return true;
-		auto func = reinterpret_cast< RuleActionFunction >( ruleInfos_[currentPos_->ruleIndex].func );
+		auto func = ruleActionFuncs_[currentPos_->ruleIndex];
 		if( func )
 			return func( actionFunc_, rule, pos, string );
 		return true;
@@ -749,7 +819,7 @@ namespace psm
 	{
 		if constexpr( Tracing )
 			actionFunc_.trace( currentPos_ - &positions_.front(), input, result,
-					   static_cast< detail::TracingRuleConstructorBase* >( ruleInfos_[currentPos_->ruleIndex].constructor )->name() );
+					   static_cast< const detail::TracingRuleConstructorBase* >( pConstructors_[currentPos_->ruleIndex] )->name() );
 	}
 
 	template< typename Rule, typename ActionRules = std::tuple<>, typename ActionFunction >
