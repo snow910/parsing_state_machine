@@ -536,7 +536,7 @@ namespace psm
 		template< typename Rule, bool Tracing >
 		struct RuleConstructorStorage
 		{
-			static constexpr RuleConstructor< Rule, Tracing > constructor;
+			static constexpr RuleConstructor< Rule, Tracing > constructor{};
 		};
 
 		//===========================================================================================================================================
