@@ -25,7 +25,7 @@ Features
 ## Usage
 
 The Parser class has two template parameters `Parser< Rule, Action >`. The second parameter specifies the type of functional object that will be called when the rule is successfully executed, can be omitted. Methods:
-	
+
 + `ParsingResult parse( std::string_view string, bool complete )`,
 + `void reset()`,
 + `void setStates( void* states )`.
@@ -84,17 +84,17 @@ In order to understand the difference between additive and multiplicative genera
 using namespace psm;
 
 struct Action {
-	using Rules = std::tuple< Plus< Range< '0', '9' > > >;
-	template< typename Rule >
-	void operator()( const Rule& rule, std::size_t pos, const std::string_view& match ) {
-		std::cout << match << '\n';
-	}
+    using Rules = std::tuple< Plus< Range< '0', '9' > > >;
+    template< typename Rule >
+    void operator()( const Rule& rule, std::size_t pos, const std::string_view& match ) {
+        std::cout << match << '\n';
+    }
 };
 
 int main() {
-	Parser< Plus< Seq< Plus< Range< '0', '9' > >, Plus< Char< ' ' > > > >, Action > parser;
-	parser.parse( "101 103  107   109" );
-	return 0;
+    Parser< Plus< Seq< Plus< Range< '0', '9' > >, Plus< Char< ' ' > > > >, Action > parser;
+    parser.parse( "101 103  107   109" );
+    return 0;
 }
 ```
 
@@ -132,27 +132,27 @@ Note: the nested rule object is available only inside the `nestedResult` method 
 In this example Seq rule successively invokes nested rules while they are successfully executed. If one of the nested rules is not successfully executed, the main rule ends unsuccessfully.
 
 ```C++
-    template< typename... Rules_ >
-	class Seq : public RuleBase
-	{
-	public:
-		using Rules = std::tuple< Rules_... >;
-		RuleResult match( RuleInputRef input, void* states ) override
-		{
-			return { RuleMatchCode::CallNested, 0 };
-		}
-		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
-		{
-			if( nestedResult.result )
-			{
-				input.setCurrent( nestedResult.input.current() );
-				if( nestedResult.index == ( sizeof...( Rules_ ) - 1 ) )
-					return { RuleMatchCode::True };
-				return { RuleMatchCode::CallNested, nestedResult.index + 1 };
-			}
-			return { RuleMatchCode::False };
-		}
-	};
+template< typename... Rules_ >
+class Seq : public RuleBase
+{
+public:
+    using Rules = std::tuple< Rules_... >;
+    RuleResult match( RuleInputRef input, void* states ) override
+    {
+        return { RuleMatchCode::CallNested, 0 };
+    }
+    RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
+    {
+        if( nestedResult.result )
+        {
+            input.setCurrent( nestedResult.input.current() );
+            if( nestedResult.index == ( sizeof...( Rules_ ) - 1 ) )
+                return { RuleMatchCode::True };
+            return { RuleMatchCode::CallNested, nestedResult.index + 1 };
+        }
+        return { RuleMatchCode::False };
+    }
+};
 ```
 
 ## Build-in rules
