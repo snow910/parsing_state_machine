@@ -200,39 +200,8 @@ namespace psm
 		template< typename... Tuples >
 		using unique_tuple_cat_t = typename unique_tuple_cat< Tuples... >::type;
 
-		template< typename Tuple1, typename Tuple2 >
-		struct tuple_cat2;
-
-		template< typename... Ts1, typename... Ts2 >
-		struct tuple_cat2< std::tuple< Ts1... >, std::tuple< Ts2... > >
-		{
-			using type = std::tuple< Ts1..., Ts2... >;
-		};
-
-		template< typename Tuple1, typename Tuple2 >
-		using tuple_cat2_t = typename tuple_cat2< Tuple1, Tuple2 >::type;
-
 		template< typename... Tuples >
-		struct tuple_cat;
-
-		template< typename Tuple1, typename Tuple2, typename... Others >
-		struct tuple_cat< Tuple1, Tuple2, Others... > : tuple_cat2< typename tuple_cat2< Tuple1, Tuple2 >::type, typename tuple_cat< Others... >::type >
-		{
-		};
-
-		template< typename Tuple1, typename Tuple2 >
-		struct tuple_cat< Tuple1, Tuple2 > : tuple_cat2< Tuple1, Tuple2 >
-		{
-		};
-
-		template< typename Tuple >
-		struct tuple_cat< Tuple >
-		{
-			using type = Tuple;
-		};
-
-		template< typename... Tuples >
-		using tuple_cat_t = typename tuple_cat< Tuples... >::type;
+		using tuple_cat_t = decltype( std::tuple_cat( std::declval< Tuples >()... ) );
 
 		//===========================================================================================================================================
 		// rule info
