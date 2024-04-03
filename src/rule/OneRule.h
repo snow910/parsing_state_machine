@@ -13,7 +13,6 @@ namespace psm
 	{
 	public:
 		using Rules = std::tuple< Rule, Others... >;
-		static constexpr std::size_t ChildrenCount = std::tuple_size_v< Rules >;
 		RuleResult match( RuleInputRef input, void* states ) override
 		{
 			return { RuleMatchCode::CallNested, 0 };
@@ -25,7 +24,7 @@ namespace psm
 				input.setCurrent( nestedResult.input.current() );
 				return { RuleMatchCode::True };
 			}
-			else if( nestedResult.index != ( ChildrenCount - 1 ) )
+			else if( nestedResult.index != sizeof...( Others ) )
 				return { RuleMatchCode::CallNested, nestedResult.index + 1 };
 			return { RuleMatchCode::False };
 		}

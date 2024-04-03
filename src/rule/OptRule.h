@@ -8,11 +8,11 @@
 
 namespace psm
 {
-	template< typename Rule >
+	template< typename Rule, typename... Others >
 	class Opt : public RuleBase
 	{
 	public:
-		using Rules = std::tuple< Rule >;
+		using Rules = std::tuple< Rule, Others... >;
 		RuleResult match( RuleInputRef input, void* states ) override
 		{
 			return { RuleMatchCode::CallNested, 0 };
@@ -20,7 +20,12 @@ namespace psm
 		RuleResult nestedResult( RuleInputRef input, void* states, const NestedRuleResult& nestedResult ) override
 		{
 			if( nestedResult.result )
+			{
 				input.setCurrent( nestedResult.input.current() );
+				return { RuleMatchCode::True };
+			}
+			else if( nestedResult.index != sizeof...( Others ) )
+				return { RuleMatchCode::CallNested, nestedResult.index + 1 };
 			return { RuleMatchCode::True };
 		}
 	};

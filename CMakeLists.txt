@@ -30,6 +30,7 @@ add_library(${PROJECT_NAME} STATIC
 	src/rule/SuccessRule.h
 	src/rule/UntilRule.h
 	src/LogTraceAction.h
+	src/LogTraceAction.cpp
 	src/Parser.h
 	src/Parser.cpp
 	src/Rule.h

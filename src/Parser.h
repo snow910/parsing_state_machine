@@ -19,22 +19,10 @@ namespace psm
 		//===========================================================================================================================================
 		// meta functions
 
-		template< typename Type, Type V, Type... Vs >
-		struct _sum
-		{
-			static constexpr Type value = V + _sum< Type, Vs... >::value;
-		};
-
-		template< typename Type, Type V >
-		struct _sum< Type, V >
-		{
-			static constexpr Type value = V;
-		};
-
 		template< typename Type, std::size_t... Vs >
 		struct sum
 		{
-			static constexpr Type value = _sum< Type, Vs... >::value;
+			static constexpr Type value = ( Vs + ... );
 		};
 
 		template< typename Type, Type V, Type... Vs >

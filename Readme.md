@@ -42,7 +42,7 @@ Incomplete strings may not contain the whole sequence to satisfy the rule. In th
 
 `States` is a pointer to some user data that will be passed to the rule object when it is executed.
 
-By default, `Action` will be called for any successfully executed rule. If you want it to be called only for specified rules, you should define a `std::tuple` alias named Rules, where you list all such rule types. `Action` must contain an overloaded operator of the following form:
+By default, `Action` will be called for any successfully executed rule, including all nested rules. If you want it to be called only for specified rules, you should define a `std::tuple` alias named Rules, where you list all such rule types. `Action` must contain an overloaded operator of the following form:
 
 ```C++
 template< typename Rule >
@@ -61,6 +61,8 @@ In last variant, `return false` aborts parsing.
 It is also possible to suppress the call of `Action` even for the specified rules if these rules are nested in `Quite`, and the depth of nesting doesn't matter.
 
 Alternatively, you can use the `parseStringView` function, which takes a lambda as `Action` to parsing a string.
+
+To debug the work of rules you can use `LogTraceAction` by specifying it as `Action`. `LogTraceAction` will print the order in which the rules are executed, their names, the matched fragment, and the result of the execution. By default it prints to `std::clog`, but you can specify any output stream.
 
 ### Recursive rules
 
@@ -204,7 +206,7 @@ public:
 
 #### `NotRanges< C... >, NotRange< Begin, End >`
 
-#### `[Reparse< R, S... >`
+#### `Reparse< R, S... >`
 
 #### `RepMinMax< Min, Max, R >, RepMin< Min, R >, RepMax< Max, R >`
 
