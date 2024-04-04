@@ -66,33 +66,29 @@ namespace psm
 		template< typename Seq0, typename Seq1 >
 		using integer_sequence_cat2_t = typename integer_sequence_cat2< Seq0, Seq1 >::type;
 
-		template< std::size_t Id, typename T, typename T0, typename... Ts >
-		struct _tuple_element_index
-		{
-			static constexpr std::size_t value = std::is_same_v< T, T0 > ? Id : _tuple_element_index< Id + 1, T, Ts... >::value;
-		};
-
-		template< std::size_t Id, typename T, typename T0 >
-		struct _tuple_element_index< Id, T, T0 >
-		{
-			static constexpr std::size_t value = std::is_same_v< T, T0 > ? Id : ( std::size_t )-1;
-		};
-
-		template< typename T, typename Tp >
+		template< std::size_t TupleSize, typename T, typename Tp >
 		struct tuple_element_index;
 
-		template< typename T, typename... Ts >
-		struct tuple_element_index< T, std::tuple< Ts... > > : _tuple_element_index< 0, T, Ts... >
+		template< std::size_t TupleSize, typename T, typename... Ts >
+		struct tuple_element_index< TupleSize, T, std::tuple< T, Ts... > >
 		{
+			static constexpr std::size_t value = 0;
 		};
 
-		template< typename T >
-		struct tuple_element_index< T, std::tuple<> > : std::integral_constant< std::size_t, ( std::size_t )-1 >
+		template< std::size_t TupleSize, typename T, typename T0, typename... Ts >
+		struct tuple_element_index< TupleSize, T, std::tuple< T0, Ts... > >
 		{
+			static constexpr std::size_t value = 1 + tuple_element_index< TupleSize, T, std::tuple< Ts... > >::value;
 		};
 
-		template< typename T, typename Tp >
-		constexpr std::size_t tuple_element_index_v = tuple_element_index< T, Tp >::value;
+		template< std::size_t TupleSize, typename T >
+		struct tuple_element_index< TupleSize, T, std::tuple<> >
+		{
+			static constexpr std::size_t value = ( std::size_t )-1 - TupleSize;
+		};
+
+		template< typename T, typename Tuple >
+		constexpr std::size_t tuple_element_index_v = tuple_element_index< std::tuple_size_v< Tuple >, T, Tuple >::value;
 
 		template< typename Whole, typename Part >
 		struct index_sequence_for_part_in_whole;
