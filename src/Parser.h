@@ -154,47 +154,22 @@ namespace psm
 		template< typename Unique, typename Others >
 		using push_unique_types_back_t = typename push_unique_types_back< Unique, Others >::type;
 
-		template< typename Tuple >
-		using unique_types = push_unique_types_back< std::tuple<>, Tuple >;
-
-		template< typename Tuple >
-		using unique_types_t = typename unique_types< Tuple >::type;
 
 		template< typename Result, typename... Tuples >
-		struct _unique_tuple_cat;
+		struct unique_tuple_cat;
 
 		template< typename Result, typename Tuple, typename... Others >
-		struct _unique_tuple_cat< Result, Tuple, Others... > : _unique_tuple_cat< push_unique_types_back_t< Result, Tuple >, Others... >
+		struct unique_tuple_cat< Result, Tuple, Others... > : unique_tuple_cat< push_unique_types_back_t< Result, Tuple >, Others... >
 		{
 		};
 
 		template< typename Result, typename Tuple >
-		struct _unique_tuple_cat< Result, Tuple > : push_unique_types_back< Result, Tuple >
+		struct unique_tuple_cat< Result, Tuple > : push_unique_types_back< Result, Tuple >
 		{
 		};
 
 		template< typename... Tuples >
-		struct unique_tuple_cat;
-
-		template< typename Tuple, typename... Others >
-		struct unique_tuple_cat< Tuple, Others... > : _unique_tuple_cat< Tuple, Others... >
-		{
-		};
-
-		template< typename Tuple >
-		struct unique_tuple_cat< Tuple >
-		{
-			using type = Tuple;
-		};
-
-		template<>
-		struct unique_tuple_cat<>
-		{
-			using type = std::tuple<>;
-		};
-
-		template< typename... Tuples >
-		using unique_tuple_cat_t = typename unique_tuple_cat< Tuples... >::type;
+		using unique_tuple_cat_t = typename unique_tuple_cat< std::tuple<>, Tuples... >::type;
 
 		template< typename... Tuples >
 		using tuple_cat_t = decltype( std::tuple_cat( std::declval< Tuples >()... ) );
