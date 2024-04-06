@@ -114,65 +114,30 @@ namespace psm
 		template< typename Tuple, typename NewType >
 		using push_type_back_t = typename push_type_back< Tuple, NewType >::type;
 
-		template< typename Tuple, typename NewType >
-		struct push_type_front;
-
-		template< typename... Ts, typename NewType >
-		struct push_type_front< std::tuple< Ts... >, NewType >
-		{
-			using type = std::tuple< NewType, Ts... >;
-		};
-
-		template< typename Tuple, typename NewType >
-		using push_type_front_t = typename push_type_front< Tuple, NewType >::type;
-
-		template< typename Unique, typename Others >
-		struct push_unique_types_back;
-
-		template< typename Unique, typename Other, typename... Others >
-		struct push_unique_types_back< Unique, std::tuple< Other, Others... > >
-		    : std::conditional_t< tuple_element_index_v< Other, Unique > == ( std::size_t )-1,
-					  push_unique_types_back< push_type_back_t< Unique, Other >, std::tuple< Others... > >,
-					  push_unique_types_back< Unique, std::tuple< Others... > > >
-		{
-		};
-
-		template< typename Unique, typename Other >
-		struct push_unique_types_back< Unique, std::tuple< Other > >
-		{
-			using type = std::conditional_t< tuple_element_index_v< Other, Unique > == ( std::size_t )-1,
-							 push_type_back_t< Unique, Other >,
-							 Unique >;
-		};
-
-		template< typename Unique >
-		struct push_unique_types_back< Unique, std::tuple<> >
-		{
-			using type = Unique;
-		};
-
-		template< typename Unique, typename Others >
-		using push_unique_types_back_t = typename push_unique_types_back< Unique, Others >::type;
-
-
-		template< typename Result, typename... Tuples >
-		struct unique_tuple_cat;
-
-		template< typename Result, typename Tuple, typename... Others >
-		struct unique_tuple_cat< Result, Tuple, Others... > : unique_tuple_cat< push_unique_types_back_t< Result, Tuple >, Others... >
-		{
-		};
-
-		template< typename Result, typename Tuple >
-		struct unique_tuple_cat< Result, Tuple > : push_unique_types_back< Result, Tuple >
-		{
-		};
-
-		template< typename... Tuples >
-		using unique_tuple_cat_t = typename unique_tuple_cat< std::tuple<>, Tuples... >::type;
-
 		template< typename... Tuples >
 		using tuple_cat_t = decltype( std::tuple_cat( std::declval< Tuples >()... ) );
+
+		template< typename T, typename... Ts >
+		struct unique : std::type_identity< T >
+		{
+		};
+
+		template< typename... Ts, typename U, typename... Us >
+		struct unique< std::tuple< Ts... >, U, Us... >
+		    : std::conditional_t< ( std::is_same_v< U, Ts > || ... ), unique< std::tuple< Ts... >, Us... >, unique< std::tuple< Ts..., U >, Us... > >
+		{
+		};
+
+		template< typename... Ts >
+		struct unique_types_tuple;
+
+		template< typename... Ts >
+		struct unique_types_tuple< std::tuple< Ts... > > : unique< std::tuple<>, Ts... >
+		{
+		};
+
+		template< typename... Tuples >
+		using unique_tuple_cat_t = typename unique_types_tuple< tuple_cat_t< Tuples... > >::type;
 
 		//===========================================================================================================================================
 		// rule info
