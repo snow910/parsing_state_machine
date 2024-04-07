@@ -488,18 +488,8 @@ namespace psm
 		template< typename Type >
 		using action_rules_t = typename action_rules< Type >::rules;
 
-		template< typename Type, typename = void >
-		struct is_tracing_enabled : std::false_type
-		{
-		};
-
 		template< typename Type >
-		struct is_tracing_enabled< Type, std::enable_if_t< Type::PsmTracing == true > > : std::true_type
-		{
-		};
-
-		template< typename Type >
-		constexpr bool is_tracing_enabled_v = is_tracing_enabled< Type >::value;
+		concept IsTracingEnabled = Type::PsmTracing;
 
 		template< typename Rule, typename ActionFunction >
 		constexpr bool is_rule_action_enabled_v = !std::is_same_v< action_rules_t< ActionFunction >, std::tuple< NaR > > &&
@@ -624,7 +614,7 @@ namespace psm
 		using ActionRules = typename detail::action_rules< ActionFunction >::rules;
 		static constexpr std::size_t MaxDeep = RuleTypeInfo::max_deep - 1;
 		static constexpr bool UseActionFunction = !std::is_same_v< ActionRules, std::tuple< NaR > >;
-		static constexpr bool Tracing = detail::is_tracing_enabled< ActionFunction >::value;
+		static constexpr bool Tracing = detail::IsTracingEnabled< ActionFunction >;
 
 		Parser();
 		Parser( ActionFunction func );
