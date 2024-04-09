@@ -5,6 +5,7 @@
 #pragma once
 
 #include "Rule.h"
+#include <algorithm>
 #include <array>
 #include <compare>
 #include <span>
@@ -19,32 +20,14 @@ namespace psm
 		//===========================================================================================================================================
 		// meta functions
 
-		template< typename Type, std::size_t... Vs >
+		template< typename Type, Type... Vs >
 		struct sum
 		{
 			static constexpr Type value = ( Vs + ... );
 		};
 
-		template< typename Type, Type V, Type... Vs >
-		struct _max
-		{
-			static constexpr Type value = V > _max< Type, Vs... >::value ? V : _max< Type, Vs... >::value;
-		};
-
-		template< typename Type, Type V >
-		struct _max< Type, V >
-		{
-			static constexpr Type value = V;
-		};
-
-		template< typename Type, std::size_t... Vs >
-		struct max
-		{
-			static constexpr Type value = _max< Type, Vs... >::value;
-		};
-
-		template< typename Type, std::size_t... Vs >
-		constexpr std::size_t max_v = max< Type, Vs... >::value;
+		template< typename Type, Type... Vs >
+		constexpr Type max_v = std::max( { Vs... } );
 
 		template< typename S >
 		struct integer_sequence_sum;
