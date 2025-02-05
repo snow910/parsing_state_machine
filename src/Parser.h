@@ -21,21 +21,10 @@ namespace psm
 		// meta functions
 
 		template< typename Type, Type... Vs >
-		struct sum
-		{
-			static constexpr Type value = ( Vs + ... );
-		};
+		constexpr Type sum_v = ( Vs + ... );
 
 		template< typename Type, Type... Vs >
 		constexpr Type max_v = std::max( { Vs... } );
-
-		template< typename S >
-		struct integer_sequence_sum;
-
-		template< typename T, T... Vs >
-		struct integer_sequence_sum< std::integer_sequence< T, Vs... > > : sum< T, Vs... >
-		{
-		};
 
 		template< typename Seq0, typename Seq1 >
 		struct integer_sequence_cat2;
@@ -216,7 +205,7 @@ namespace psm
 
 		template< typename... Rules_ >
 		struct dependent_rule_count< std::tuple< Rules_... > >
-		    : std::integral_constant< std::size_t, integer_sequence_sum< std::index_sequence< std::tuple_size_v< typename Rules_::Rules >... > >::value >
+		    : std::integral_constant< std::size_t, sum_v<std::size_t, std::tuple_size_v< typename Rules_::Rules >... > >
 		{
 		};
 
