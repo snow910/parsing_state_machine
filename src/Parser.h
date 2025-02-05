@@ -38,29 +38,17 @@ namespace psm
 		template< typename Seq0, typename Seq1 >
 		using integer_sequence_cat2_t = typename integer_sequence_cat2< Seq0, Seq1 >::type;
 
-		template< std::size_t TupleSize, typename T, typename Tp >
-		struct tuple_element_index;
-
-		template< std::size_t TupleSize, typename T, typename... Ts >
-		struct tuple_element_index< TupleSize, T, std::tuple< T, Ts... > >
+		template< typename Element, typename Tuple >
+		constexpr size_t tuple_element_index_v = []() constexpr
 		{
-			static constexpr std::size_t value = 0;
-		};
+			auto index = ( std::size_t )-1;
+			[&]< size_t... Is >( std::index_sequence< Is... > )
+			{
+				( ( std::is_same_v< std::tuple_element_t< Is, Tuple >, Element > ? ( index = Is, false ) : true ) && ... );
+			}( std::make_index_sequence< std::tuple_size_v< Tuple > >{} );
 
-		template< std::size_t TupleSize, typename T, typename T0, typename... Ts >
-		struct tuple_element_index< TupleSize, T, std::tuple< T0, Ts... > >
-		{
-			static constexpr std::size_t value = 1 + tuple_element_index< TupleSize, T, std::tuple< Ts... > >::value;
-		};
-
-		template< std::size_t TupleSize, typename T >
-		struct tuple_element_index< TupleSize, T, std::tuple<> >
-		{
-			static constexpr std::size_t value = ( std::size_t )-1 - TupleSize;
-		};
-
-		template< typename T, typename Tuple >
-		constexpr std::size_t tuple_element_index_v = tuple_element_index< std::tuple_size_v< Tuple >, T, Tuple >::value;
+			return index;
+		}();
 
 		template< typename Whole, typename Part >
 		struct index_sequence_for_part_in_whole;
@@ -205,7 +193,7 @@ namespace psm
 
 		template< typename... Rules_ >
 		struct dependent_rule_count< std::tuple< Rules_... > >
-		    : std::integral_constant< std::size_t, sum_v<std::size_t, std::tuple_size_v< typename Rules_::Rules >... > >
+		    : std::integral_constant< std::size_t, sum_v< std::size_t, std::tuple_size_v< typename Rules_::Rules >... > >
 		{
 		};
 
